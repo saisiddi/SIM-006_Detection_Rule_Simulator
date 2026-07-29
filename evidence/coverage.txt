@@ -1,0 +1,20 @@
+﻿........................................................................ [ 52%]
+................................................................         [100%]
+
+---------- coverage: platform win32, python 3.12.10-final-0 ----------
+Name                       Stmts   Miss  Cover   Missing
+--------------------------------------------------------
+sim_006\__init__.py            4      0   100%
+sim_006\__main__.py            4      0   100%
+sim_006\api.py                21      0   100%
+sim_006\cli.py                70      0   100%
+sim_006\constants.py           8      0   100%
+sim_006\engine.py             45      0   100%
+sim_006\models.py             41      0   100%
+sim_006\rules.py             114      0   100%
+sim_006\streamlit_app.py      60      0   100%
+--------------------------------------------------------
+TOTAL                        367      0   100%
+
+Required test coverage of 70% reached. Total coverage: 100.00%
+136 passed in 15.41s

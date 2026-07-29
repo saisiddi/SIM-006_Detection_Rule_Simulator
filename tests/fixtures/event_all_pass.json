@@ -1,0 +1,20 @@
+{
+  "battery_id": "BID-003",
+  "event": {
+    "event_type": "telemetry",
+    "timestamp": "2026-07-29T14:30:00Z",
+    "voltage_v": 48.0,
+    "temperature_c": 25.0,
+    "soc_percent": 60.0,
+    "sequence_number": 3001,
+    "certificate_expiry": "2027-01-01T00:00:00Z",
+    "firmware_hash": "abc123",
+    "expected_firmware_hash": "abc123",
+    "open_incident": false,
+    "prior_soc_percent": 58.0,
+    "charging_source_present": true,
+    "last_seen_sequence_number": 3000,
+    "last_seen_timestamp": "2026-07-29T14:29:50Z"
+  },
+  "rule_ids": "all"
+}
