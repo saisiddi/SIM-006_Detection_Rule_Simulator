@@ -1,0 +1,12 @@
+{
+  "battery_id": "BID-001",
+  "event": {
+    "event_type": "telemetry",
+    "timestamp": null,
+    "voltage_v": 48.2,
+    "temperature_c": 28.1,
+    "soc_percent": 78.3,
+    "sequence_number": 1001
+  },
+  "rule_ids": ["R-02", "R-05", "R-06"]
+}

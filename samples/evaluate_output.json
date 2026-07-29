@@ -1,0 +1,27 @@
+{
+  "battery_id": "BID-001",
+  "rules_evaluated": 3,
+  "results": [
+    {
+      "rule_id": "R-02",
+      "rule_name": "Missing telemetry timestamp",
+      "result": "HARD_FAIL",
+      "detail": "timestamp field is null"
+    },
+    {
+      "rule_id": "R-05",
+      "rule_name": "Voltage out of range",
+      "result": "PASS",
+      "detail": "Voltage 48.2V within 40-56V range"
+    },
+    {
+      "rule_id": "R-06",
+      "rule_name": "Critical temperature",
+      "result": "PASS",
+      "detail": "Temperature 28.1C within -20-55C range"
+    }
+  ],
+  "overall_gate": "HARD_FAIL",
+  "gate_reason": "Rule R-02 triggered HARD_FAIL",
+  "simulated": true
+}
