@@ -1,0 +1,14 @@
+{
+  "battery_id": "BID-005",
+  "event": {
+    "event_type": "telemetry",
+    "timestamp": "2026-07-29T14:30:00Z",
+    "voltage_v": 48.0,
+    "temperature_c": 25.0,
+    "soc_percent": 70.0,
+    "sequence_number": 5001,
+    "prior_soc_percent": 60.0,
+    "charging_source_present": false
+  },
+  "rule_ids": ["R-08"]
+}
