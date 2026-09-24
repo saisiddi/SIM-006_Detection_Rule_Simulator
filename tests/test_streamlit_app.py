@@ -67,6 +67,34 @@ def test_subset_selection_evaluates_only_selected_rules() -> None:
     assert len(app.dataframe[0].value) == 1
 
 
+def test_generate_test_event_populates_generated_json() -> None:
+    """Generating a test event populates the keyed JSON editor."""
+    app = AppTest.from_file(APP_PATH)
+    app.run(timeout=30)
+    button_labels = [button.label for button in app.button]
+    app.button[button_labels.index("Generate Test Event")].click().run(timeout=30)
+
+    generated_text = next(
+        text_area.value for text_area in app.text_area if text_area.label == "Generated event JSON"
+    )
+    generated_payload = json.loads(generated_text)
+    assert generated_payload["battery_id"] == "SIM-BATTERY-001"
+    assert generated_payload["event"]["event_type"] == "telemetry"
+
+
+def test_evaluate_generated_event_renders_results() -> None:
+    """A generated event can be sent directly through the shared engine."""
+    app = AppTest.from_file(APP_PATH)
+    app.run(timeout=30)
+    button_labels = [button.label for button in app.button]
+    app.button[button_labels.index("Generate Test Event")].click().run(timeout=30)
+    button_labels = [button.label for button in app.button]
+    app.button[button_labels.index("Evaluate generated event")].click().run(timeout=30)
+
+    assert not app.error
+    assert any("Overall gate: PASS" in markdown.value for markdown in app.markdown)
+
+
 def test_default_input_falls_back_when_samples_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

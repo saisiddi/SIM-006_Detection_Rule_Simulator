@@ -16,6 +16,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from sim_006.engine import RuleEngine, RuleSelectionError
+from sim_006.explanation import configured_explanation_service
 from sim_006.models import EvaluationRequest
 from sim_006.rules import RULE_REGISTRY
 
@@ -51,6 +52,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers.add_parser("list-rules", help="List all 8 detection rules and thresholds")
+    explain_parser = subparsers.add_parser(
+        "explain", help="Explain a deterministic evaluation from a request JSON file"
+    )
+    explain_parser.add_argument("--event", required=True, help="Path to evaluation request JSON file")
 
     return parser
 
@@ -144,6 +149,19 @@ def _cmd_list_rules() -> int:
     return 0
 
 
+def _cmd_explain(event_path: str) -> int:
+    """Evaluate a request and print its structured explanation."""
+    try:
+        request = _load_request(event_path, None)
+        evaluation = RuleEngine().evaluate(request)
+        explanation = configured_explanation_service().explain(evaluation)
+    except (CliError, RuleSelectionError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(explanation.model_dump_json(indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point.
 
@@ -164,6 +182,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_evaluate(args.event, args.rules)
     if args.command == "list-rules":
         return _cmd_list_rules()
+    if args.command == "explain":
+        return _cmd_explain(args.event)
 
     parser.print_help()
     return 0

@@ -59,6 +59,7 @@ python -m playwright install chromium   # only needed for scripts/take_screensho
 python -m sim_006 evaluate --event samples/evaluate_input.json --rules R-02,R-05,R-06
 python -m sim_006 evaluate --event samples/evaluate_input.json --rules all
 python -m sim_006 list-rules
+python -m sim_006 explain --event samples/evaluate_input.json
 ```
 
 The `--event` file holds a full evaluation request
@@ -75,10 +76,15 @@ uvicorn sim_006.api:app --port 8000
 | Method | Path | Description |
 |---|---|---|
 | POST | `/evaluate` | Evaluate rules against an event |
+| POST | `/explain` | Explain an existing deterministic evaluation |
 | GET | `/rules` | Rule catalogue with descriptions and thresholds |
 | GET | `/health` | Health check |
 
 Interactive OpenAPI docs: `http://localhost:8000/docs`.
+
+`/explain` accepts `{"evaluation": <response from /evaluate>}`. It does not
+re-run or alter detection. With no provider configured, it returns a structured
+deterministic fallback and marks `ai_generated: false`.
 
 ```bash
 curl -X POST http://localhost:8000/evaluate \
@@ -100,6 +106,35 @@ Paste or upload a request JSON, multi-select rules or evaluate all,
 click **Run Evaluation**, review the color-coded gate badge
 (green PASS / yellow WARN / red HARD_FAIL) and results table, and download
 the JSON report.
+
+The **Test Event Simulator** section provides ten valid local profiles,
+editable JSON, validation, direct evaluation, and a fallback explanation.
+
+### Input simulator
+
+The local harness in `sim_006.simulator` models the current `Event` contract.
+It does not claim to reproduce undocumented upstream schemas. Profiles are:
+normal, replay, missing timestamp, invalid certificate, firmware mismatch,
+unsafe voltage, critical temperature, cyber incident, impossible SOC change,
+and multi-condition. Each profile returns a validated `EvaluationRequest`:
+
+```python
+from sim_006.engine import RuleEngine
+from sim_006.simulator import generate_request
+
+response = RuleEngine().evaluate(generate_request("unsafe_voltage"))
+assert response.overall_gate == "HARD_FAIL"
+```
+
+### Explanation and security boundary
+
+The deterministic `RuleEngine` is always authoritative. The explanation
+adapter receives only an existing `EvaluationResponse`; it cannot change event
+data, create detections, suppress rules, or change the gate. Provider output is
+validated and the gate is restored from the original response. No external AI
+dependency or API key is required, and no provider is configured by default.
+Event text is data, not instructions, and the application does not execute
+event or explanation content.
 
 ### Sample input / output
 
@@ -138,6 +173,8 @@ sim_006/
   models.py          # Pydantic v2 models
   rules.py           # R-01..R-08 handlers + RULE_REGISTRY
   engine.py          # RuleEngine orchestration + gate aggregation
+  simulator.py       # Reusable local upstream-event profiles
+  explanation.py      # Structured explanation provider boundary + fallback
   cli.py             # CLI interface
   api.py             # FastAPI interface
   streamlit_app.py   # Streamlit UI
