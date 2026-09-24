@@ -1,0 +1,18 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+COPY pyproject.toml .
+COPY sim_006 ./sim_006
+COPY tests ./tests
+COPY samples ./samples
+
+CMD ["python", "-m", "pytest", "--cov=sim_006", "--cov-report=term-missing"]
