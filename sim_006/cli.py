@@ -55,7 +55,9 @@ def build_parser() -> argparse.ArgumentParser:
     explain_parser = subparsers.add_parser(
         "explain", help="Explain a deterministic evaluation from a request JSON file"
     )
-    explain_parser.add_argument("--event", required=True, help="Path to evaluation request JSON file")
+    explain_parser.add_argument(
+        "--event", required=True, help="Path to evaluation request JSON file"
+    )
 
     return parser
 
