@@ -5,12 +5,14 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
+from sim_006.constants import BATTERY_ID_MAX_LENGTH, FIRMWARE_HASH_MAX_LENGTH
 from sim_006.models import (
     EvaluationRequest,
     EvaluationResponse,
     Event,
     RuleEvaluationResult,
 )
+from tests.conftest import load_fixture
 
 AWARE_TS = "2026-07-29T14:30:00Z"
 NAIVE_TS = datetime(2026, 7, 29, 14, 30, 0)
@@ -135,3 +137,112 @@ def test_evaluation_response_defaults_simulated_true() -> None:
         gate_reason="All rules passed",
     )
     assert response.simulated is True
+
+
+# --- Phase 10 hardening: schema-boundary fixes (product-owner approved) ---
+
+
+@pytest.mark.parametrize(
+    "fixture_name",
+    [
+        "event_all_pass.json",
+        "event_impossible_soc.json",
+        "event_missing_timestamp.json",
+        "event_mixed_result.json",
+        "event_voltage_warn.json",
+    ],
+)
+def test_build_spec_fixtures_still_validate_under_extra_forbid(fixture_name: str) -> None:
+    """All 5 Build Spec Section 7 fixtures still parse with extra='forbid'."""
+    request = EvaluationRequest.model_validate(load_fixture(fixture_name))
+    assert request.battery_id
+    assert request.rule_ids
+
+
+def test_unknown_event_field_is_rejected() -> None:
+    """extra='forbid' rejects unknown keys instead of silently dropping them (PRD 7)."""
+    with pytest.raises(ValidationError) as exc_info:
+        Event.model_validate({"event_type": "telemetry", "surprise_field": 1})
+    assert "surprise_field" in str(exc_info.value)
+
+
+def test_known_event_fields_still_accepted() -> None:
+    """extra='forbid' does not reject any documented Event field."""
+    event = Event.model_validate(load_fixture("event_all_pass.json")["event"])
+    assert event.event_type == "telemetry"
+
+
+@pytest.mark.parametrize("soc", [0.0, 100.0, 50.0, 78.3])
+def test_soc_percent_within_bounds_accepted(soc: float) -> None:
+    """soc_percent accepts the full inclusive 0-100 range."""
+    assert Event.model_validate({"event_type": "telemetry", "soc_percent": soc}).soc_percent == soc
+
+
+@pytest.mark.parametrize("soc", [-0.1, -1.0, 100.1, 150.0, 200.0])
+def test_soc_percent_out_of_bounds_rejected(soc: float) -> None:
+    """soc_percent outside 0-100 is rejected at schema validation."""
+    with pytest.raises(ValidationError):
+        Event.model_validate({"event_type": "telemetry", "soc_percent": soc})
+
+
+@pytest.mark.parametrize("prior", [0.0, 100.0])
+def test_prior_soc_percent_bounds_applied(prior: float) -> None:
+    """prior_soc_percent carries the same 0-100 bound as soc_percent."""
+    event = Event.model_validate(
+        {"event_type": "telemetry", "soc_percent": 50.0, "prior_soc_percent": prior}
+    )
+    assert event.prior_soc_percent == prior
+
+
+@pytest.mark.parametrize("prior", [-5.0, 101.0])
+def test_prior_soc_percent_out_of_bounds_rejected(prior: float) -> None:
+    """prior_soc_percent outside 0-100 is rejected at schema validation."""
+    with pytest.raises(ValidationError):
+        Event.model_validate(
+            {"event_type": "telemetry", "soc_percent": 50.0, "prior_soc_percent": prior}
+        )
+
+
+def test_battery_id_at_max_length_accepted() -> None:
+    """battery_id exactly at the cap is accepted."""
+    payload = load_fixture("event_all_pass.json")
+    payload["battery_id"] = "B" * BATTERY_ID_MAX_LENGTH
+    request = EvaluationRequest.model_validate(payload)
+    assert len(request.battery_id) == BATTERY_ID_MAX_LENGTH
+
+
+def test_battery_id_over_max_length_rejected() -> None:
+    """battery_id one character over the cap is rejected."""
+    payload = load_fixture("event_all_pass.json")
+    payload["battery_id"] = "B" * (BATTERY_ID_MAX_LENGTH + 1)
+    with pytest.raises(ValidationError):
+        EvaluationRequest.model_validate(payload)
+
+
+def test_firmware_hash_at_max_length_accepted() -> None:
+    """firmware_hash exactly at the cap is accepted."""
+    event = Event.model_validate(
+        {
+            "event_type": "firmware",
+            "firmware_hash": "a" * FIRMWARE_HASH_MAX_LENGTH,
+            "expected_firmware_hash": "b" * FIRMWARE_HASH_MAX_LENGTH,
+        }
+    )
+    assert len(event.firmware_hash or "") == FIRMWARE_HASH_MAX_LENGTH
+
+
+def test_firmware_hash_over_max_length_rejected() -> None:
+    """firmware_hash one character over the cap is rejected."""
+    with pytest.raises(ValidationError):
+        Event.model_validate(
+            {
+                "event_type": "firmware",
+                "firmware_hash": "a" * (FIRMWARE_HASH_MAX_LENGTH + 1),
+            }
+        )
+
+
+def test_megabyte_scale_string_rejected_at_schema_boundary() -> None:
+    """The 5MB-string DoS surface is closed: oversized values never reach the rules."""
+    with pytest.raises(ValidationError):
+        Event.model_validate({"event_type": "firmware", "firmware_hash": "a" * 5_000_000})

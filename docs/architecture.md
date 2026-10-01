@@ -80,10 +80,12 @@ never mutate it.
 ### 3.3 Constants
 
 Every numeric threshold lives in `sim_006/constants.py`
-(`REPLAY_STALENESS_WINDOW_SECONDS`, `VOLTAGE_SAFE_MIN/MAX`,
-`VOLTAGE_ESCALATION_PCT`, `TEMP_SAFE_MIN/MAX`, `TEMP_ESCALATION_PCT`,
-`SOC_JUMP_THRESHOLD_PCT`) and is imported by `rules.py`. WARN bands are
-computed from the escalation percentages, never restated inline.
+(`REPLAY_STALENESS_WINDOW_SECONDS`, `REPLAY_MAX_FUTURE_SKEW_SECONDS`,
+`VOLTAGE_SAFE_MIN/MAX`, `VOLTAGE_ESCALATION_PCT`, `TEMP_SAFE_MIN/MAX`,
+`TEMP_ESCALATION_PCT`, `SOC_JUMP_THRESHOLD_PCT`, `SOC_MIN/MAX_PCT`,
+`BATTERY_ID_MAX_LENGTH`, `FIRMWARE_HASH_MAX_LENGTH`) and is imported by
+`rules.py` **and** `models.py` (schema bounds). WARN bands are computed from
+the escalation percentages, never restated inline.
 
 ## 4. Implementation decisions and their sources
 
@@ -103,13 +105,29 @@ computed from the escalation percentages, never restated inline.
 | `/rules` response = `{"rules": [{rule_id, rule_name, description}], "simulated": true}` — thresholds embedded in each description | PRD 10.2 + mandatory simulated tag |
 | httpx (FastAPI TestClient) and playwright (UI screenshot evidence) added to requirements.txt beyond the Build Spec list | Product-owner approvals (Phases 6 and 7) |
 | Venv on Python 3.12 (machine default 3.14 cannot build Pillow pinned by streamlit<1.40) | Phase 1 constraint, PRD floor 3.10+ |
+| `soc_percent` / `prior_soc_percent` bounded to inclusive 0-100 | **Deviation from PRD 5.1** (types only) — product-owner approved, Phase 10 hardening |
+| R-01 also flags timestamps >`REPLAY_MAX_FUTURE_SKEW_SECONDS` (30s) ahead of evaluation time | **Deviation from Build Spec 1** (staleness defined one-way) — product-owner approved, Phase 10; window chosen symmetric with the staleness window |
+| `Event` uses `extra="forbid"` so unknown keys are rejected | **Deviation from PRD 5.1** (silent) — product-owner approved, Phase 10; the 5 Build Spec 7 fixtures verified unaffected |
+| `battery_id` capped at 64 chars, `firmware_hash`/`expected_firmware_hash` at 128 | **Deviation from PRD 5.1** (silent) — product-owner approved, Phase 10; no string-typed certificate field exists (`certificate_expiry` is a datetime), so nothing to cap there |
+| `event_type` spoofing is an ingress trust boundary, not a rule defect | Documented in `docs/threat_model.md` for WP-005-S1 |
+| Streamlit tests freeze `simulator._now` alongside `rules._utcnow` | Required once R-01 became symmetric — a generated wall-clock event would otherwise skew against a frozen evaluation clock |
 
 ## 5. Security posture
 
 - Synthetic data only; no real security events anywhere in the codebase.
 - All response objects carry `"simulated": true`.
+- **Documented exception, intentional and not an oversight:** FastAPI's default
+  HTTP 422 validation body and the CLI's schema-error stderr text do *not*
+  carry `simulated: true` — this is the Build Spec Section 4 error contract,
+  which specifies those two shapes verbatim and deliberately leaves them
+  untagged; every other response path (200, 400, `/rules`, `/health`, CLI
+  stdout) is tagged.
 - Input validated before evaluation (fail fast, no silent coercion of
   genuinely wrong types).
+- `event_type` spoofing (telemetry-shaped data labelled `identity` bypassing
+  R-02/R-05/R-06/R-07) is a trust-boundary property, not a defect — documented
+  in `docs/threat_model.md` for **WP-005-S1**, with the recommended ingress
+  control.
 - Fail-closed bias on positive detections (expired certificates, hash
   mismatches, unknown charging source); fail-open only for the documented
   first-seen prior-state exception of R-01 / R-08.
@@ -120,9 +138,9 @@ computed from the escalation percentages, never restated inline.
 
 ## 6. Testing and CI
 
-- 136 pytest tests across models, rules, engine, API, CLI, integration, and
+- 192 pytest tests across models, rules, engine, API, CLI, integration, and
   UI layers, using the 5 exact Build Spec 7 fixtures.
-- Statement coverage: 100% (target >=70%; `evidence/coverage.txt`).
+- Statement coverage: 95.30% (target >=70%; `evidence/coverage.txt`).
 - GitHub Actions (`/.github/workflows/test.yml`): ruff, black --check, and
   `pytest --cov=sim_006 --cov-fail-under=70` on Python 3.10, blocking merges
   that regress either lint or coverage (Build Spec 8).
