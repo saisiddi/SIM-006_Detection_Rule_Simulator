@@ -50,12 +50,18 @@ class DeterministicExplanationProvider:
             "summary": summary,
             "overall_decision": evaluation.overall_gate,
             "triggered_rules": [
-                {"rule_id": result.rule_id, "rule_name": result.rule_name,
-                 "severity": result.result, "explanation": result.detail}
+                {
+                    "rule_id": result.rule_id,
+                    "rule_name": result.rule_name,
+                    "severity": result.result,
+                    "explanation": result.detail,
+                }
                 for result in triggered
             ],
             "what_happened": what_happened,
-            "why_it_matters": "The overall decision is determined by the deterministic rule engine.",
+            "why_it_matters": (
+                "The overall decision is determined by the deterministic rule engine."
+            ),
             "recommended_checks": checks,
             "limitations": [
                 "This is a simulated explanation, not an operational incident response.",

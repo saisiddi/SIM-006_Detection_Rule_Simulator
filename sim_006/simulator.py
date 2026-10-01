@@ -6,23 +6,42 @@ from typing import Literal
 from sim_006.models import EvaluationRequest, Event
 
 Scenario = Literal[
-    "normal", "replay", "missing_timestamp", "invalid_certificate",
-    "firmware_mismatch", "unsafe_voltage", "critical_temperature",
-    "cyber_incident", "impossible_soc", "multi_condition",
+    "normal",
+    "replay",
+    "missing_timestamp",
+    "invalid_certificate",
+    "firmware_mismatch",
+    "unsafe_voltage",
+    "critical_temperature",
+    "cyber_incident",
+    "impossible_soc",
+    "multi_condition",
 ]
 
 SCENARIOS: tuple[Scenario, ...] = (
-    "normal", "replay", "missing_timestamp", "invalid_certificate",
-    "firmware_mismatch", "unsafe_voltage", "critical_temperature",
-    "cyber_incident", "impossible_soc", "multi_condition",
+    "normal",
+    "replay",
+    "missing_timestamp",
+    "invalid_certificate",
+    "firmware_mismatch",
+    "unsafe_voltage",
+    "critical_temperature",
+    "cyber_incident",
+    "impossible_soc",
+    "multi_condition",
 )
 
 SCENARIO_LABELS = {
-    "normal": "Normal telemetry", "replay": "Replay attack",
-    "missing_timestamp": "Missing timestamp", "invalid_certificate": "Invalid certificate",
-    "firmware_mismatch": "Firmware mismatch", "unsafe_voltage": "Unsafe voltage",
-    "critical_temperature": "Critical temperature", "cyber_incident": "Open cyber incident",
-    "impossible_soc": "Impossible SOC change", "multi_condition": "Multiple conditions",
+    "normal": "Normal telemetry",
+    "replay": "Replay attack",
+    "missing_timestamp": "Missing timestamp",
+    "invalid_certificate": "Invalid certificate",
+    "firmware_mismatch": "Firmware mismatch",
+    "unsafe_voltage": "Unsafe voltage",
+    "critical_temperature": "Critical temperature",
+    "cyber_incident": "Open cyber incident",
+    "impossible_soc": "Impossible SOC change",
+    "multi_condition": "Multiple conditions",
 }
 
 
@@ -43,9 +62,14 @@ def generate_request(
     """
     timestamp = _now()
     event_data: dict[str, object] = {
-        "event_type": source, "timestamp": timestamp, "voltage_v": 48.0,
-        "temperature_c": 25.0, "soc_percent": 50.0, "sequence_number": 101,
-        "open_incident": False, "prior_soc_percent": 49.0,
+        "event_type": source,
+        "timestamp": timestamp,
+        "voltage_v": 48.0,
+        "temperature_c": 25.0,
+        "soc_percent": 50.0,
+        "sequence_number": 101,
+        "open_incident": False,
+        "prior_soc_percent": 49.0,
         "charging_source_present": True,
     }
     if scenario == "replay":
@@ -55,7 +79,11 @@ def generate_request(
     elif scenario == "invalid_certificate":
         event_data.update(event_type="identity", certificate_expiry=timestamp - timedelta(days=1))
     elif scenario == "firmware_mismatch":
-        event_data.update(event_type="firmware", firmware_hash="observed-hash", expected_firmware_hash="expected-hash")
+        event_data.update(
+            event_type="firmware",
+            firmware_hash="observed-hash",
+            expected_firmware_hash="expected-hash",
+        )
     elif scenario == "unsafe_voltage":
         event_data["voltage_v"] = 65.0
     elif scenario == "critical_temperature":
@@ -66,7 +94,9 @@ def generate_request(
         event_data.update(soc_percent=80.0, prior_soc_percent=50.0, charging_source_present=False)
     elif scenario == "multi_condition":
         event_data.update(voltage_v=65.0, temperature_c=65.0, open_incident=True)
-    return EvaluationRequest(battery_id=battery_id, event=Event.model_validate(event_data), rule_ids="all")
+    return EvaluationRequest(
+        battery_id=battery_id, event=Event.model_validate(event_data), rule_ids="all"
+    )
 
 
 def generate_event(scenario: Scenario = "normal", **kwargs: object) -> Event:

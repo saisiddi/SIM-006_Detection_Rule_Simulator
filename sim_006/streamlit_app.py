@@ -17,7 +17,6 @@ from sim_006.models import EvaluationRequest, EvaluationResponse
 from sim_006.rules import RULE_REGISTRY
 from sim_006.simulator import SCENARIO_LABELS, SCENARIOS, generate_request
 
-
 _GATE_COLORS: dict[str, str] = {
     "PASS": "#2e7d32",
     "WARN": "#f9a825",
@@ -267,11 +266,7 @@ def _load_default_input() -> str:
         The sample request JSON, or a minimal inline fallback if the samples
         directory is unavailable.
     """
-    sample_path = (
-        Path(__file__).resolve().parent.parent
-        / "samples"
-        / "evaluate_input.json"
-    )
+    sample_path = Path(__file__).resolve().parent.parent / "samples" / "evaluate_input.json"
 
     try:
         return sample_path.read_text(encoding="utf-8")
@@ -309,15 +304,10 @@ def _evaluate(
         return None
 
     if not isinstance(payload, dict):
-        st.error(
-            "JSON payload must be an object: "
-            "{battery_id, event, rule_ids?}"
-        )
+        st.error("JSON payload must be an object: " "{battery_id, event, rule_ids?}")
         return None
 
-    payload["rule_ids"] = (
-        "all" if scope == "all" else selected_rule_ids
-    )
+    payload["rule_ids"] = "all" if scope == "all" else selected_rule_ids
 
     try:
         request = EvaluationRequest.model_validate(payload)
@@ -383,9 +373,7 @@ def _render_results(response: EvaluationResponse) -> None:
     )
 
     if st.button("Explain with AI", key="explain_button"):
-        st.session_state["explanation"] = ExplanationService().explain(
-            response
-        )
+        st.session_state["explanation"] = ExplanationService().explain(response)
 
     explanation = st.session_state.get("explanation")
 
@@ -399,10 +387,7 @@ def _render_results(response: EvaluationResponse) -> None:
         st.write(explanation.why_it_matters)
 
         if explanation.recommended_checks:
-            st.write(
-                "Recommended checks: "
-                + " ".join(explanation.recommended_checks)
-            )
+            st.write("Recommended checks: " + " ".join(explanation.recommended_checks))
 
         st.caption(
             "AI explanation unavailable: showing the deterministic "
@@ -508,9 +493,7 @@ def main() -> None:
     scope = st.radio(
         "Rules to evaluate",
         options=["all", "subset"],
-        format_func=lambda value: (
-            "All 8 rules" if value == "all" else "Select subset"
-        ),
+        format_func=lambda value: ("All 8 rules" if value == "all" else "Select subset"),
         horizontal=True,
     )
 
@@ -524,11 +507,7 @@ def main() -> None:
         )
 
     if st.button("Run Evaluation"):
-        raw_text = (
-            uploaded.getvalue().decode("utf-8")
-            if uploaded is not None
-            else pasted
-        )
+        raw_text = uploaded.getvalue().decode("utf-8") if uploaded is not None else pasted
 
         response = _evaluate(
             raw_text,
@@ -545,9 +524,7 @@ def main() -> None:
             unsafe_allow_html=True,
         )
 
-        _render_results(
-            st.session_state["evaluation"]
-        )
+        _render_results(st.session_state["evaluation"])
 
     st.markdown(
         "<div class='section-tag'>Test Event Simulator</div>",
@@ -571,9 +548,7 @@ def main() -> None:
             source=source,
         )
 
-        generated_json = generated.model_dump_json(
-            indent=2
-        )
+        generated_json = generated.model_dump_json(indent=2)
 
         st.session_state["generated_event"] = generated_json
         st.session_state["generated_event_text"] = generated_json
@@ -594,20 +569,14 @@ def main() -> None:
 
     if st.button("Validate generated event"):
         try:
-            EvaluationRequest.model_validate(
-                json.loads(generated_text)
-            )
-            st.success(
-                "Event is valid for SIM-006 evaluation."
-            )
+            EvaluationRequest.model_validate(json.loads(generated_text))
+            st.success("Event is valid for SIM-006 evaluation.")
         except (json.JSONDecodeError, ValidationError) as exc:
             st.error(f"Invalid generated event: {exc}")
 
     if st.button("Evaluate generated event"):
         if not generated_text:
-            st.warning(
-                "Generate or enter an event before evaluating it."
-            )
+            st.warning("Generate or enter an event before evaluating it.")
         else:
             response = _evaluate(
                 generated_text,
@@ -623,9 +592,7 @@ def main() -> None:
                 st.rerun()
 
     if st.session_state.get("generated_event_status"):
-        st.success(
-            st.session_state["generated_event_status"]
-        )
+        st.success(st.session_state["generated_event_status"])
 
 
 if __name__ == "__main__":
