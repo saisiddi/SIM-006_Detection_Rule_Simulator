@@ -15,6 +15,7 @@ import io
 import json
 import logging
 import random
+import re
 import subprocess
 import sys
 import time
@@ -24,6 +25,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
+from pydantic import ValidationError
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
@@ -37,7 +39,22 @@ API_PORT = 8518
 BASE_URL = f"http://localhost:{API_PORT}"
 TOTAL_EVENTS = 10_000
 FINDINGS: list[str] = []
+# (original finding, status, reasoning) for the six observations carried over
+# from the first stress pass. Status is re-derived from live behaviour on every
+# run, never hardcoded, so the report cannot claim a fix it does not observe.
+DISPOSITIONS: list[tuple[str, str, str]] = []
 REAL_UTCNOW = rules_module._utcnow
+
+
+def disposition(finding: str, status: str, reasoning: str) -> None:
+    """Record the disposition of a carried-over finding.
+
+    Args:
+        finding: The original finding text from the first stress pass.
+        status: "Resolved...", "Rejected...", or "OPEN".
+        reasoning: Why that status applies, verified against the current build.
+    """
+    DISPOSITIONS.append((finding, status, reasoning))
 
 
 def fresh(now: datetime) -> str:
@@ -338,17 +355,23 @@ def _boundary_cases(now: datetime) -> list[tuple[str, str, dict, str]]:
 
 
 def _extreme_cases() -> list[tuple[str, str, dict, str, str | None]]:
+    """Extreme cases and their expected outcome.
+
+    Fourth element is a gate result, or ``VALIDATION_ERROR`` when the payload
+    must be rejected at schema validation before any rule runs. The fifth is a
+    stable key used to record the finding's disposition in the report.
+    """
     return [
         (
             "R-08",
-            "SOC 150 (>100) with no charging source",
+            "SOC 150 (>100) rejected at schema validation",
             {
                 "soc_percent": 150.0,
                 "prior_soc_percent": 60.0,
                 "charging_source_present": False,
             },
-            "HARD_FAIL",
-            "schema has no 0-100 bound on soc_percent (PRD 5.1 defines types only)",
+            "VALIDATION_ERROR",
+            "soc_bound",
         ),
         (
             "R-01",
@@ -378,9 +401,8 @@ def _extreme_cases() -> list[tuple[str, str, dict, str, str | None]]:
             {
                 "timestamp": "2126-07-29T14:30:00Z",
             },
-            "PASS",
-            "far-future timestamps are not flagged: R-01 staleness is defined "
-            "one-way (older only) in Build Spec 1 — potential spec gap",
+            "HARD_FAIL",
+            "future_ts",
         ),
         (
             "R-01",
@@ -412,18 +434,70 @@ def section_3_boundaries() -> dict:
     finally:
         rules_module._utcnow = REAL_UTCNOW
 
-    for rule_id, label, overrides, expected, note in _extreme_cases():
+    observed: dict[str, object] = {}
+    for rule_id, label, overrides, expected, key in _extreme_cases():
         case_count += 1
-        if note:
-            FINDINGS.append(f"boundary observation — {note}")
         event = {**base_telemetry(datetime.now(timezone.utc)), **overrides}
-        request = EvaluationRequest.model_validate(
-            {"battery_id": "BID-FUZZ", "event": event, "rule_ids": [rule_id]}
-        )
+        try:
+            request = EvaluationRequest.model_validate(
+                {"battery_id": "BID-FUZZ", "event": event, "rule_ids": [rule_id]}
+            )
+        except ValidationError:
+            rejected = True
+            request = None
+        else:
+            rejected = False
+
+        if expected == "VALIDATION_ERROR":
+            observed[key or ""] = rejected
+            if not rejected:
+                failures.append(f"{label}: expected schema rejection, but it validated")
+            continue
+        if rejected:
+            failures.append(f"{label}: unexpectedly rejected at schema validation")
+            continue
+
         result = engine.evaluate(request).results[0]
+        if key:
+            observed[key] = result.result
         if result.result != expected:
             failures.append(f"{label}: expected {expected}, got {result.result}")
+
+    _record_boundary_dispositions(observed)
     return {"cases": case_count, "failures": failures, "pass": not failures}
+
+
+def _record_boundary_dispositions(observed: dict[str, object]) -> None:
+    """Record how the SOC-bound and future-timestamp findings resolved.
+
+    Args:
+        observed: Live outcomes keyed by ``_extreme_cases`` disposition key.
+    """
+    soc_ok = observed.get("soc_bound") is True
+    disposition(
+        "schema has no 0-100 bound on soc_percent (PRD 5.1 defines types only)",
+        "Resolved" if soc_ok else "OPEN",
+        (
+            "Event.soc_percent and prior_soc_percent now carry inclusive 0-100 "
+            "bounds from SOC_MIN_PCT/SOC_MAX_PCT; this run confirmed a 150% "
+            "reading is rejected at schema validation before R-08 executes."
+            if soc_ok
+            else "soc_percent=150 still validated; the bound is not being enforced."
+        ),
+    )
+    future_ok = observed.get("future_ts") == "HARD_FAIL"
+    disposition(
+        "far-future timestamps are not flagged: R-01 staleness is defined "
+        "one-way (older only) in Build Spec 1 — potential spec gap",
+        "Resolved" if future_ok else "OPEN",
+        (
+            "R-01 now flags timestamps more than REPLAY_MAX_FUTURE_SKEW_SECONDS "
+            "(30s, symmetric with the staleness window) ahead of the evaluation "
+            "clock; this run confirmed a year-2126 timestamp returns HARD_FAIL."
+            if future_ok
+            else "A year-2126 timestamp still returned PASS; the future check is missing."
+        ),
+    )
 
 
 def section_4_parity() -> dict:
@@ -469,13 +543,21 @@ def section_5_adversarial() -> dict:
     status, _ = api_post(
         {"battery_id": "BID-ADV", "event": {**base, "unexpected_field": "x"}, "rule_ids": "all"}
     )
-    if status == 200:
-        FINDINGS.append(
-            "unknown extra event fields are silently ignored (Pydantic default "
-            "extra='ignore'); PRD 7 says reject malformed input — extra='forbid' "
-            "may be intended but is nowhere specified"
-        )
-    checks.append(("unknown extra fields: accepted but documented (no crash)", True))
+    extra_rejected = status == 422
+    checks.append(("unknown extra event fields -> HTTP 422 (extra='forbid')", extra_rejected))
+    disposition(
+        "unknown extra event fields are silently ignored (Pydantic default "
+        "extra='ignore'); PRD 7 says reject malformed input — extra='forbid' "
+        "may be intended but is nowhere specified",
+        "Resolved" if extra_rejected else "OPEN",
+        (
+            "Event now sets extra='forbid'; this run confirmed an unknown key is "
+            "rejected with HTTP 422 before any rule runs. All 5 Build Spec 7 "
+            "fixtures re-verified unaffected."
+            if extra_rejected
+            else "Unknown event keys are still accepted silently."
+        ),
+    )
 
     status, _ = api_post(
         {"battery_id": "BID-ADV", "event": {**base, "voltage_v": "high"}, "rule_ids": "all"}
@@ -496,12 +578,20 @@ def section_5_adversarial() -> dict:
             "rule_ids": ["R-04"],
         }
     )
-    if status == 200:
-        FINDINGS.append(
-            "5MB string field accepted (no length limits in models; spec silent — "
-            "potential DoS surface at the API boundary)"
-        )
-    checks.append(("oversized 5MB field handled without crash", status in (200, 413, 422)))
+    oversized_rejected = status == 422
+    checks.append(("oversized 5MB string -> HTTP 422", oversized_rejected))
+    disposition(
+        "5MB string field accepted (no length limits in models; spec silent — "
+        "potential DoS surface at the API boundary)",
+        "Resolved" if oversized_rejected else "OPEN",
+        (
+            "firmware_hash/expected_firmware_hash capped at FIRMWARE_HASH_MAX_LENGTH "
+            "(128) and battery_id at BATTERY_ID_MAX_LENGTH (64); this run confirmed "
+            "a 5MB value is rejected with HTTP 422 before any rule runs."
+            if oversized_rejected
+            else "A 5MB string was still accepted at the API boundary."
+        ),
+    )
 
     status, _ = api_post(
         {
@@ -519,12 +609,21 @@ def section_5_adversarial() -> dict:
             "rule_ids": ["R-02", "R-05", "R-06", "R-07"],
         }
     )
-    if status == 200 and body.get("overall_gate") == "PASS":
-        FINDINGS.append(
-            "event_type spoofing: telemetry-shaped data labeled 'identity' bypasses "
-            "R-02/R-05/R-06/R-07 — by design (event_type is assigned by trusted "
-            "generators), but worth a Threat Model note (WP-005-S1)"
-        )
+    threat_doc = (REPO_ROOT / "docs" / "threat_model.md").exists()
+    disposition(
+        "event_type spoofing: telemetry-shaped data labeled 'identity' bypasses "
+        "R-02/R-05/R-06/R-07 — by design (event_type is assigned by trusted "
+        "generators), but worth a Threat Model note (WP-005-S1)",
+        "Resolved — documented" if threat_doc else "OPEN",
+        (
+            "Written up as docs/threat_model.md for WP-005-S1: rule-coverage table, "
+            "residual-risk rating, and the recommended ingress control that binds "
+            "event_type to the authenticated producer identity. Behaviour is "
+            "unchanged — it is a trust boundary, not a rule defect."
+            if threat_doc
+            else "docs/threat_model.md is missing."
+        ),
+    )
     checks.append(("event_type spoof handled deterministically", status == 200))
 
     simulated_ok = True
@@ -537,15 +636,30 @@ def section_5_adversarial() -> dict:
     for path in ("/rules", "/health"):
         response = _HTTP.get(path)
         simulated_ok &= response.json().get("simulated") is True
+    sim_temp_path = REPO_ROOT / "evidence" / "_stress_sim_tmp.json"
     cli_body = cli_eval(
         {"battery_id": "BID-ADV", "event": base, "rule_ids": "all"},
-        REPO_ROOT / "evidence" / "_stress_sim_tmp.json",
+        sim_temp_path,
     )
     simulated_ok &= cli_body.get("simulated") is True
-    FINDINGS.append(
+    sim_temp_path.unlink(missing_ok=True)
+    arch_path = REPO_ROOT / "docs" / "architecture.md"
+    arch_documented = arch_path.exists() and "not an oversight" in arch_path.read_text(
+        encoding="utf-8"
+    )
+    disposition(
         "simulated-tag audit: 200/400 bodies, /rules, /health, and CLI stdout all "
         "carry simulated=true; FastAPI's default 422 body does not (explicitly kept "
-        "per Build Spec 4); CLI schema-error stderr text is plain text"
+        "per Build Spec 4); CLI schema-error stderr text is plain text",
+        "Rejected — intentional" if arch_documented else "OPEN",
+        (
+            "Build Spec Section 4 defines the 422 body and the CLI schema-error stderr "
+            "text verbatim and does not tag them; leaving them untagged is a deliberate "
+            "contract decision, now stated explicitly in docs/architecture.md Section 5 "
+            "rather than left implicit."
+            if arch_documented
+            else "The exception is not yet documented in docs/architecture.md."
+        ),
     )
     checks.append(("simulated:true on every non-422 response path", simulated_ok))
 
@@ -572,9 +686,13 @@ def section_6_regression() -> dict:
     ruff_code, _ = run([sys.executable, "-m", "ruff", "check", "."])
     black_code, _ = run([sys.executable, "-m", "black", "--check", "."])
     tail = pytest_out.strip().splitlines()[-1] if pytest_out.strip() else "no output"
+    count_match = re.search(r"(\d+) passed", tail)
+    coverage_match = re.search(r"Total coverage:\s+([\d.]+)%", pytest_out)
     return {
         "pytest_code": pytest_code,
         "pytest_tail": tail,
+        "pytest_count": count_match.group(1) if count_match else "unknown",
+        "coverage_pct": coverage_match.group(1) if coverage_match else "unknown",
         "ruff_code": ruff_code,
         "black_code": black_code,
         "pass": pytest_code == 0 and ruff_code == 0 and black_code == 0,
@@ -613,13 +731,20 @@ def _pf(flag: bool) -> str:
 
 def build_report(s1: dict, s2: dict, s3: dict, s4: dict, s5: dict, s6: dict) -> str:
     all_passed = all(s["pass"] for s in (s1, s2, s3, s4, s5, s6))
-    verdict = (
-        "READY for Phase 10 sign-off — no defects found; listed findings are "
-        "documented spec gaps/observations, none require code changes unless you "
-        "decide otherwise."
-        if all_passed
-        else "NOT READY — at least one stress section failed; investigate first."
-    )
+    open_findings = [f for f, status, _ in DISPOSITIONS if status == "OPEN"]
+    if not all_passed:
+        verdict = "NOT READY — at least one stress section failed; investigate first."
+    elif open_findings:
+        verdict = (
+            f"NOT READY — {len(open_findings)} carried-over finding(s) still OPEN: "
+            + "; ".join(open_findings)
+        )
+    else:
+        verdict = (
+            "READY for Phase 10 sign-off — all 6 sections PASS and all 6 carried-over "
+            "findings are Resolved or explicitly Rejected with reasoning; see the "
+            "disposition table below."
+        )
     parity_note = (
         f"Divergences: {s4['mismatches']}"
         if s4["mismatches"]
@@ -631,7 +756,8 @@ def build_report(s1: dict, s2: dict, s3: dict, s4: dict, s5: dict, s6: dict) -> 
         "# SIM-006 — Final Stress & Validation Report",
         "",
         f"Generated: {datetime.now(timezone.utc).isoformat()} — independent adversarial",
-        f"pass, separate from the 136-test pytest suite. {TOTAL_EVENTS:,} synthetic events,",
+        f"pass, separate from the {s6['pytest_count']}-test pytest suite "
+        f"({s6['coverage_pct']}% statement coverage). {TOTAL_EVENTS:,} synthetic events,",
         "live uvicorn server, concurrent clients (16 threads).",
         "",
         "## Section summary",
@@ -680,10 +806,11 @@ def build_report(s1: dict, s2: dict, s3: dict, s4: dict, s5: dict, s6: dict) -> 
         "## 3. Boundary / edge fuzzing",
         "",
         f"{s3['cases']} cases: both edges of both severity bands (R-05, R-06), the 30s R-01",
-        "staleness edge, last_seen_timestamp ordering, the 5.0-point SOC jump edge, plus",
-        "extremes (negative voltage, absolute-zero temperature, SOC=150, 2^63 and negative",
-        f"sequence numbers, year-2000 and year-2126 timestamps). Failures: {boundary_failures}.",
-        "No unhandled exceptions anywhere.",
+        "staleness edge and the 30s future-skew edge, last_seen_timestamp ordering, the",
+        "5.0-point SOC jump edge, plus extremes (negative voltage, absolute-zero",
+        "temperature, SOC=150 which is now rejected at schema validation, 2^63 and",
+        "negative sequence numbers, year-2000 and year-2126 timestamps — the latter now",
+        f"flagged by R-01). Failures: {boundary_failures}. No unhandled exceptions anywhere.",
         "",
         "## 4. Cross-interface parity",
         "",
@@ -705,14 +832,30 @@ def build_report(s1: dict, s2: dict, s3: dict, s4: dict, s5: dict, s6: dict) -> 
         f"- ruff check .: exit {s6['ruff_code']}",
         f"- black --check .: exit {s6['black_code']}",
         "",
-        "## Findings (spec gaps / observations — no crashes, no defects)",
+        "## Findings — disposition after Phase 10 hardening",
         "",
+        "Status is re-derived from live behaviour on every run of this script;",
+        "nothing below is asserted from memory.",
+        "",
+        "| # | Finding (original wording) | Status | Reasoning |",
+        "|---|---|---|---|",
     ]
+    for index, (finding, status, reasoning) in enumerate(DISPOSITIONS, start=1):
+        lines.append(f"| {index} | {finding} | **{status}** | {reasoning} |")
     if FINDINGS:
+        lines.extend(["", "### New observations from this run", ""])
         lines.extend(f"- {finding}" for finding in FINDINGS)
     else:
-        lines.append("- None.")
-    lines.extend(["", "## Verdict", "", f"**{verdict}**", ""])
+        lines.extend(["", "### New observations from this run", "", "- None."])
+    lines.extend(
+        [
+            "",
+            "## Verdict",
+            "",
+            f"**{verdict}**",
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 

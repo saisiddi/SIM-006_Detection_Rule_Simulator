@@ -96,6 +96,51 @@ class TestR01:
         assert result.result == "PASS"
         assert result.detail == INSUFFICIENT_CONTEXT_DETAIL
 
+    def test_future_timestamp_within_skew_window_passes(self) -> None:
+        """Clock skew inside the window is tolerated (15s ahead of 14:30:05)."""
+        result = RULE_REGISTRY["R-01"].handler(
+            _event(timestamp="2026-07-29T14:30:20Z", sequence_number=7)
+        )
+        assert result.result == "PASS"
+
+    def test_future_timestamp_exactly_at_skew_window_passes(self) -> None:
+        """The boundary is exclusive: exactly 30s ahead is still accepted."""
+        result = RULE_REGISTRY["R-01"].handler(
+            _event(timestamp="2026-07-29T14:30:35Z", sequence_number=7)
+        )
+        assert result.result == "PASS"
+
+    def test_future_timestamp_beyond_skew_window_hard_fail(self) -> None:
+        """A timestamp more than 30s ahead of evaluation time is flagged."""
+        result = RULE_REGISTRY["R-01"].handler(
+            _event(timestamp="2026-07-29T14:30:36Z", sequence_number=7)
+        )
+        assert result.result == "HARD_FAIL"
+        assert "future" in result.detail
+        assert "skew window 30s" in result.detail
+
+    def test_far_future_timestamp_hard_fail(self) -> None:
+        """A century-ahead timestamp is flagged, not silently accepted."""
+        result = RULE_REGISTRY["R-01"].handler(
+            _event(timestamp="2126-07-29T14:30:00Z", sequence_number=7)
+        )
+        assert result.result == "HARD_FAIL"
+        assert "future" in result.detail
+
+    def test_future_check_does_not_shadow_stale_check(self) -> None:
+        """The stale (past) branch still fires for old timestamps."""
+        result = RULE_REGISTRY["R-01"].handler(
+            _event(timestamp="2026-07-29T14:29:00Z", sequence_number=7)
+        )
+        assert result.result == "HARD_FAIL"
+        assert "stale" in result.detail
+
+    def test_r01_description_documents_both_windows(self) -> None:
+        """GET /rules and list-rules surface the symmetric future window too."""
+        description = RULE_REGISTRY["R-01"].description
+        assert "30s" in description
+        assert "ahead" in description
+
 
 class TestR02:
     """R-02: Missing telemetry timestamp (TC-006-01)."""

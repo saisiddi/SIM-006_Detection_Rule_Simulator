@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 
 from sim_006.constants import (
+    REPLAY_MAX_FUTURE_SKEW_SECONDS,
     REPLAY_STALENESS_WINDOW_SECONDS,
     SOC_JUMP_THRESHOLD_PCT,
     TEMP_ESCALATION_PCT,
@@ -56,7 +57,8 @@ def evaluate_r01(event: Event) -> RuleEvaluationResult:
 
     HARD_FAIL if ``sequence_number`` duplicates ``last_seen_sequence_number``,
     or if ``timestamp`` is more than REPLAY_STALENESS_WINDOW_SECONDS older
-    than the current evaluation time, or older than ``last_seen_timestamp``.
+    than the current evaluation time, more than REPLAY_MAX_FUTURE_SKEW_SECONDS
+    ahead of it, or older than ``last_seen_timestamp``.
 
     Args:
         event: The event to evaluate.
@@ -94,6 +96,17 @@ def evaluate_r01(event: Event) -> RuleEvaluationResult:
                 detail=(
                     f"Timestamp is stale: {age:.0f}s older than evaluation time "
                     f"(window {REPLAY_STALENESS_WINDOW_SECONDS}s)"
+                ),
+            )
+        if event.timestamp - now > timedelta(seconds=REPLAY_MAX_FUTURE_SKEW_SECONDS):
+            lead = (event.timestamp - now).total_seconds()
+            return RuleEvaluationResult(
+                rule_id=rule_id,
+                rule_name=rule_name,
+                result="HARD_FAIL",
+                detail=(
+                    f"Timestamp is in the future: {lead:.0f}s ahead of evaluation time "
+                    f"(skew window {REPLAY_MAX_FUTURE_SKEW_SECONDS}s)"
                 ),
             )
         if event.last_seen_timestamp is not None and event.timestamp < event.last_seen_timestamp:
@@ -480,7 +493,8 @@ RULE_REGISTRY: dict[str, RuleDefinition] = {
         "Replay attack detected",
         evaluate_r01,
         f"HARD_FAIL if timestamp is >{REPLAY_STALENESS_WINDOW_SECONDS}s older than "
-        "evaluation time or last_seen_timestamp, or sequence_number duplicates "
+        f"evaluation time or >{REPLAY_MAX_FUTURE_SKEW_SECONDS}s ahead of it, or "
+        "older than last_seen_timestamp, or sequence_number duplicates "
         "last_seen_sequence_number",
     ),
     "R-02": RuleDefinition(

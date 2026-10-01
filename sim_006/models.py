@@ -9,7 +9,14 @@ schema validation time.
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from sim_006.constants import (
+    BATTERY_ID_MAX_LENGTH,
+    FIRMWARE_HASH_MAX_LENGTH,
+    SOC_MAX_PCT,
+    SOC_MIN_PCT,
+)
 
 
 class Event(BaseModel):
@@ -26,31 +33,35 @@ class Event(BaseModel):
         timestamp: Event time (timezone-aware UTC), if present.
         voltage_v: Pack voltage in volts.
         temperature_c: Pack temperature in Celsius.
-        soc_percent: State of charge, 0-100 percent.
+        soc_percent: State of charge, 0-100 percent inclusive.
         sequence_number: Monotonically increasing event sequence number.
         certificate_expiry: Certificate expiry time (timezone-aware UTC).
-        firmware_hash: Observed firmware hash.
+        firmware_hash: Observed firmware hash (max FIRMWARE_HASH_MAX_LENGTH).
         expected_firmware_hash: Expected firmware hash for comparison.
         open_incident: Whether an open cyber incident is linked to the battery.
-        prior_soc_percent: Previous state of charge reading, if known.
+        prior_soc_percent: Previous state of charge reading, 0-100 inclusive.
         charging_source_present: Whether a charging source was present.
         last_seen_sequence_number: Sequence number of the previous event.
         last_seen_timestamp: Timestamp of the previous event (timezone-aware UTC).
+
+    Unknown keys are rejected (``extra="forbid"``) so malformed or
+    attacker-supplied fields fail fast at schema validation rather than being
+    silently dropped (PRD Section 7; product-owner approved, Phase 10).
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     event_type: Literal["telemetry", "identity", "firmware", "cyber"]
     timestamp: datetime | None = None
     voltage_v: float | None = None
     temperature_c: float | None = None
-    soc_percent: float | None = None
+    soc_percent: float | None = Field(default=None, ge=SOC_MIN_PCT, le=SOC_MAX_PCT)
     sequence_number: int | None = None
     certificate_expiry: datetime | None = None
-    firmware_hash: str | None = None
-    expected_firmware_hash: str | None = None
+    firmware_hash: str | None = Field(default=None, max_length=FIRMWARE_HASH_MAX_LENGTH)
+    expected_firmware_hash: str | None = Field(default=None, max_length=FIRMWARE_HASH_MAX_LENGTH)
     open_incident: bool | None = None
-    prior_soc_percent: float | None = None
+    prior_soc_percent: float | None = Field(default=None, ge=SOC_MIN_PCT, le=SOC_MAX_PCT)
     charging_source_present: bool | None = None
     last_seen_sequence_number: int | None = None
     last_seen_timestamp: datetime | None = None
@@ -78,12 +89,13 @@ class EvaluationRequest(BaseModel):
     """Request to evaluate one or more rules against a single event.
 
     Attributes:
-        battery_id: Identifier of the battery the event belongs to.
+        battery_id: Identifier of the battery the event belongs to
+            (max BATTERY_ID_MAX_LENGTH characters).
         event: The event to evaluate.
         rule_ids: List of rule IDs (e.g. ["R-01", "R-02"]) or "all".
     """
 
-    battery_id: str
+    battery_id: str = Field(max_length=BATTERY_ID_MAX_LENGTH)
     event: Event
     rule_ids: list[str] | Literal["all"]
 

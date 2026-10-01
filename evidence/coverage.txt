@@ -1,20 +1,29 @@
-﻿........................................................................ [ 52%]
-................................................................         [100%]
+........................................................................ [ 37%]
+........................................................................ [ 75%]
+................................................                         [100%]
+=============================== warnings summary ===============================
+venv/lib/python3.12/site-packages/starlette/testclient.py:51
+  /run/media/siddi/Usage/ITelematics/SIM006/venv/lib/python3.12/site-packages/starlette/testclient.py:51: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
 
----------- coverage: platform win32, python 3.12.10-final-0 ----------
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+
+---------- coverage: platform linux, python 3.12.14-final-0 ----------
 Name                       Stmts   Miss  Cover   Missing
 --------------------------------------------------------
-sim_006\__init__.py            4      0   100%
-sim_006\__main__.py            4      0   100%
-sim_006\api.py                21      0   100%
-sim_006\cli.py                70      0   100%
-sim_006\constants.py           8      0   100%
-sim_006\engine.py             45      0   100%
-sim_006\models.py             41      0   100%
-sim_006\rules.py             114      0   100%
-sim_006\streamlit_app.py      60      0   100%
+sim_006/__init__.py            6      0   100%
+sim_006/__main__.py            4      0   100%
+sim_006/api.py                25      0   100%
+sim_006/cli.py                85     10    88%   156-164, 188
+sim_006/constants.py          13      0   100%
+sim_006/engine.py             45      0   100%
+sim_006/explanation.py        45      0   100%
+sim_006/models.py             44      0   100%
+sim_006/rules.py             117      0   100%
+sim_006/simulator.py          32      1    97%   104
+sim_006/streamlit_app.py     116     14    88%   376, 381-392, 571-575, 579
 --------------------------------------------------------
-TOTAL                        367      0   100%
+TOTAL                        532     25    95%
 
-Required test coverage of 70% reached. Total coverage: 100.00%
-136 passed in 15.41s
+Required test coverage of 70% reached. Total coverage: 95.30%
+192 passed, 1 warning in 2.40s

@@ -150,7 +150,7 @@ ruff check .
 black --check .
 ```
 
-Current status: 136 tests passing, 100% statement coverage
+Current status: 192 tests passing, 95.30% statement coverage
 (see `evidence/coverage.txt`).
 
 ## Evidence package
@@ -159,9 +159,12 @@ Current status: 136 tests passing, 100% statement coverage
 |---|---|
 | UI screenshots (PASS / HARD_FAIL) | `evidence/ui_pass.png`, `evidence/ui_hard_fail.png` |
 | Coverage report | `evidence/coverage.txt` |
+| Stress & validation report | `evidence/final_stress_test_report.md` |
+| Phase 10 sign-off checklist | `evidence/phase10_signoff.md` |
 | Sample input/output (PRD Section 11) | `samples/` |
 | Test fixtures (Build Spec Section 7) | `tests/fixtures/` |
 | Architecture document | `docs/architecture.md` |
+| Threat model note (WP-005-S1) | `docs/threat_model.md` |
 
 ## Project layout
 
