@@ -86,6 +86,13 @@ class TestEvaluateEndpoint:
         response = client.post("/evaluate", json=payload)
         assert response.status_code == 422
 
+    def test_explain_endpoint_only_explains_supplied_evaluation(self, client: TestClient) -> None:
+        evaluation = client.post("/evaluate", json=load_fixture("event_voltage_warn.json")).json()
+        response = client.post("/explain", json={"evaluation": evaluation})
+        assert response.status_code == 200
+        assert response.json()["simulated"] is True
+        assert response.json()["overall_decision"] == evaluation["overall_gate"]
+
 
 class TestRulesEndpoint:
     """GET /rules."""

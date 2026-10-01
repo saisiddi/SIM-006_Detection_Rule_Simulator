@@ -26,6 +26,12 @@ Event (JSON request: {battery_id, event, rule_ids})
      |
      v
  EvaluationResponse (JSON, simulated=true always)
+
+For local testing, `sim_006.simulator.generate_request()` supplies validated
+synthetic upstream profiles before this same flow. After evaluation, the
+optional `/explain` endpoint passes the existing response to
+`ExplanationService`; it never sends raw event data to a decision-making
+engine and never changes the gate.
 ```
 
 Three interfaces — CLI (`sim_006/cli.py`), FastAPI (`sim_006/api.py`),
@@ -43,6 +49,8 @@ prove all three return byte-identical responses for identical requests.
 | `api.py` | Dev 3 | FastAPI endpoints, error-to-HTTP mapping |
 | `cli.py` | Dev 3 | CLI + `__main__.py` entry point |
 | `streamlit_app.py` | Dev 4 | Streamlit dashboard |
+| `simulator.py` | test harness | Reusable validated upstream-event profiles |
+| `explanation.py` | explanation layer | Structured provider boundary and deterministic fallback |
 | `scripts/` | tooling | Screenshot evidence generation |
 | `tests/` | shared (Blueprint 4.3 split) | models / rules / engine / api+cli / integration / UI |
 
@@ -105,6 +113,10 @@ computed from the escalation percentages, never restated inline.
 - Fail-closed bias on positive detections (expired certificates, hash
   mismatches, unknown charging source); fail-open only for the documented
   first-seen prior-state exception of R-01 / R-08.
+- Explanation providers receive an existing `EvaluationResponse` only.
+  Provider output is schema-validated, the original gate is authoritative,
+  and malformed output falls back locally. No provider, secret, tool access,
+  or code execution is enabled by default.
 
 ## 6. Testing and CI
 

@@ -123,3 +123,9 @@ class EvaluationResponse(BaseModel):
     overall_gate: Literal["PASS", "WARN", "HARD_FAIL"]
     gate_reason: str
     simulated: bool = True
+
+
+class ExplanationRequest(BaseModel):
+    """Request body for explaining an already-computed evaluation."""
+
+    evaluation: EvaluationResponse

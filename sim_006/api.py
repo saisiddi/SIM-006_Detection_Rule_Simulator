@@ -12,7 +12,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from sim_006.engine import RuleEngine, RuleSelectionError
-from sim_006.models import EvaluationRequest, EvaluationResponse
+from sim_006.explanation import ExplanationResponse, configured_explanation_service
+from sim_006.models import EvaluationRequest, EvaluationResponse, ExplanationRequest
 from sim_006.rules import RULE_REGISTRY
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,12 @@ def evaluate(request: EvaluationRequest) -> EvaluationResponse:
         The evaluation response with per-rule results and the overall gate.
     """
     return RuleEngine().evaluate(request)
+
+
+@app.post("/explain", response_model=ExplanationResponse)
+def explain(request: ExplanationRequest) -> ExplanationResponse:
+    """Explain an existing deterministic response without re-evaluating it."""
+    return configured_explanation_service().explain(request.evaluation)
 
 
 @app.get("/rules")
