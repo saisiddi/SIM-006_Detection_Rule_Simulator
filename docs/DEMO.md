@@ -37,78 +37,21 @@ docker compose up --build api
 - The old Streamlit service now sits behind a compose profile (`legacy-streamlit`), so it does **not** start by default.
 - Teardown: `docker compose down`.
 
-## Public hosting on Render (approved plan; creation needs your Render login)
+## Demo day (local)
 
-Creating the service puts an unauthenticated `POST /evaluate` on the public internet. The data is synthetic and every
-response carries `"simulated": true`, but treat the URL as private (see "Before and after the demo").
+The demo runs locally only; nothing is hosted. (The Dockerfile still supports a hosted deploy later.)
 
-| Item | Value |
-|---|---|
-| Service name | `sim006-demo` |
-| Repo / branch | `saisiddi/SIM-006_Detection_Rule_Simulator`, branch `feat/demo-ui` (`main` does not have the frontend yet) |
-| Runtime | Docker, `./Dockerfile` |
-| Instance type | **Starter**, 0.5 CPU / 512 MB, **$7 per month** |
-| Why not Free | Render docs: a Free web service "spins down" after 15 minutes without traffic and takes "about one minute" to start again |
-| Health check path | `/health` |
-| Auto-Deploy | **Off**, so later pushes cannot change the live demo |
-| Environment variables | none. Render supplies `PORT` and the image reads it |
-| Public URL | `https://sim006-demo.onrender.com/app/` (Render adds a suffix if the name is taken; use the URL it shows) |
+1. Disable sleep and screen lock, and close other apps that could pop up notifications (chat, mail, updaters).
+2. Start the server: `venv/bin/python -m uvicorn sim_006.api:app --port 8000`
+3. Just before presenting, in a second terminal: `venv/bin/python scripts/verify_demo.py http://localhost:8000`
+   and confirm it ends with `RESULT: ALL OK`.
+4. Open **http://localhost:8000/app/**, click **Voltage warning** once, and confirm the big lamp is amber and says WARN.
+5. Check the old Streamlit UI is not running: `ss -ltnp | grep 8501` prints nothing.
 
-Sources: [pricing](https://render.com/pricing), [free-tier limits](https://render.com/docs/free),
-[web services](https://render.com/docs/web-services), [deploys / auto-deploy](https://render.com/docs/deploys),
-[health checks](https://render.com/docs/health-checks).
+**Port 8000 already in use** (`Address already in use`): find the holder with `ss -ltnp | grep 8000`, note the `pid=` value,
+check what it is (`ps -p <pid> -o cmd=`), stop it with `kill <pid>` (use `kill -9 <pid>` only if it ignores that), then
+start the server again.
 
-### Create it (one time, in the Render dashboard)
-
-Button labels can differ slightly from this list; the values are what matter.
-
-1. Sign in at https://dashboard.render.com.
-2. **New +**, **Web Service**, **Git Provider**. If GitHub is not connected, choose **Connect GitHub**, install the Render
-   GitHub app, and grant it access to the `SIM-006_Detection_Rule_Simulator` repository only.
-3. Select the repository, **Connect**.
-4. Fill in: **Name** `sim006-demo`; **Branch** `feat/demo-ui`; **Language / Runtime** `Docker`; **Dockerfile Path**
-   `./Dockerfile`; **Region** the one closest to the venue; **Instance Type** `Starter` ($7 / month).
-5. Open **Advanced**: set **Health Check Path** to `/health`; set **Auto-Deploy** to **Off**. Add no environment variables.
-6. **Create Web Service**. Wait for the deploy log to end with the service **Live** (the first Docker build takes a few
-   minutes). If it fails, copy the last 30 lines of the log.
-7. Copy the `https://....onrender.com` URL shown under the service name and keep it to yourself.
-8. Verify from your laptop (checks `/health`, the `/` redirect, and all six scenarios against the public URL):
-
-   ```bash
-   venv/bin/python scripts/verify_demo.py https://sim006-demo.onrender.com
-   ```
-
-To redeploy on purpose later: service page, **Manual Deploy**, **Deploy latest commit** (Auto-Deploy stays Off).
-
-### Teardown
-
-Render dashboard, open the service, **Settings**, scroll to the bottom, **Delete Web Service**. Check the **Billing** page
-afterwards to confirm no instance is still running.
-
-## Before and after the demo
-
-**The URL must not be shared publicly.** `POST /evaluate` has no authentication. The data is synthetic, but anyone who
-has the link can send requests to a billed instance. Show the URL to the panel; do not post it in chats, issues, or the PR.
-
-**About 30 minutes before presenting: resume the service.**
-
-1. Render dashboard, open `sim006-demo`. If it is suspended, use the **Resume** button on the service page.
-2. Wait until the service shows **Live** (a resumed service redeploys, so allow several minutes; that is why the lead time
-   is 30 minutes).
-3. Check from your laptop: `curl -s https://sim006-demo.onrender.com/health` returns `{"status":"ok","simulated":true}`.
-4. Run `venv/bin/python scripts/verify_demo.py https://sim006-demo.onrender.com` and confirm `RESULT: ALL OK`.
-5. Open `/app/`, click **Voltage warning** once, and confirm the big lamp is amber and says WARN.
-6. Keep the offline fallback ready (launch command at the top of this file) in case the venue network fails.
-
-**Right after presenting: suspend the service.**
-
-1. Render dashboard, open `sim006-demo`, **Settings**, scroll to the bottom, **Suspend Web Service**, confirm.
-2. Confirm the service shows **Suspended**.
-3. Check the **Billing** page.
-
-Note: Render's docs that I could read describe suspending and resuming Free services and sandboxes, but give no click path
-or billing statement for a paid web service. The button names above are what the dashboard normally calls them; if they
-differ, look under the service's **Settings**. If you do not plan to demo again soon, delete the service instead.
 
 ## 60-second demo script
 
