@@ -36,6 +36,14 @@ PAIRS = [
     ("WARN lamp: text on amber", "on-warn", "warn", 4.5),
     ("FAIL lamp: text on red", "on-fail", "fail", 4.5),
     ("FAIL pill text", "#FF9A92", "panel", 4.5),
+    ("WARN chip: amber text on dark chip", "warn", "on-warn", 4.5),
+    ("FAIL chip: red text on white chip", "fail", "on-fail", 4.5),
+    ("PASS chip on dim lamp: dark text on green", "on-pass", "pass", 4.5),
+    ("idle lamp text", "ink-2", "panel-2", 4.5),
+    ("disabled button text", "ink-2", "panel-2", 4.5),
+    ("button text on hover fill", "ink", "#2A2E34", 4.5),
+    ("mono request text on textarea", "ink", "ground", 4.5),
+    ("primary button hover (white) text", "ground", "#FFFFFF", 4.5),
     ("error text on error box", "#FFB3AC", "#2A1210", 4.5),
     ("standby master text", "ink-2", "panel-2", 4.5),
     ("primary button text", "ground", "ink", 4.5),
@@ -53,11 +61,16 @@ def get(x: str) -> str:
 
 
 bad = 0
+text_min = 99.0
 for label, fg, bg, need in PAIRS:
     r = ratio(get(fg), get(bg))
     ok = r >= need
     bad += 0 if ok else 1
-    print(f"{'OK ' if ok else 'BAD'} {r:5.2f}:1 (need {need}) {label}")
+    kind = "UI part (3:1)" if "(UI part)" in label else "text (4.5:1)"
+    if kind.startswith("text"):
+        text_min = min(text_min, r)
+    print(f"{'OK ' if ok else 'BAD'} {r:5.2f}:1 {kind:14} {label}")
+print(f"lowest TEXT pair: {text_min:.2f}:1 (AA needs 4.5)")
 for names in LIGHTNESS:
     ls = {n: round(lum(T[n]), 3) for n in names}
     spread = max(ls.values()) / max(min(ls.values()), 0.001)
