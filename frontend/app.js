@@ -1,4 +1,4 @@
-import { SCENARIOS } from "./scenarios.js?v=2";
+import { SCENARIOS } from "./scenarios.js?v=3";
 
 const $ = (id) => document.getElementById(id);
 const LABEL = { PASS: "Pass", WARN: "Warn", HARD_FAIL: "Hard fail" };
@@ -277,6 +277,28 @@ async function loadFile(file) {
   note.textContent = `Loaded ${file.name} and evaluated.`;
 }
 
+function useCurrentTime() {
+  const note = $("file-note");
+  let payload;
+  try {
+    payload = JSON.parse($("req").value);
+  } catch {
+    note.textContent = "The request box is not valid JSON, so no time was set.";
+    return;
+  }
+  if (!payload || typeof payload.event !== "object" || payload.event === null || Array.isArray(payload.event)) {
+    note.textContent = "The request has no event object, so no time was set.";
+    return;
+  }
+  const now = Date.now();
+  const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
+  payload.event.timestamp = iso(now);
+  payload.event.last_seen_timestamp = iso(now - 10_000);
+  $("req").value = JSON.stringify(payload, null, 2);
+  $("req").dispatchEvent(new Event("input")); // an edit, like typing: clears scenario and file marks
+  note.textContent = `Set timestamp to ${payload.event.timestamp} and last_seen_timestamp 10 seconds earlier. Press Run evaluation to send it.`;
+}
+
 function download() {
   if (!state.last) return;
   const url = URL.createObjectURL(new Blob([JSON.stringify(state.last, null, 2)], { type: "application/json" }));
@@ -315,6 +337,7 @@ async function boot() {
   document.querySelectorAll('input[name="scope"]').forEach((i) =>
     i.addEventListener("change", () => { $("rule-picks").hidden = currentScope() !== "subset"; }));
   $("load-file").addEventListener("click", () => $("file-input").click());
+  $("use-now").addEventListener("click", useCurrentTime);
   $("file-input").addEventListener("change", (e) => {
     const f = e.target.files[0];
     e.target.value = ""; // lets the same file be chosen again

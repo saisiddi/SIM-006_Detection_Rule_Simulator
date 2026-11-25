@@ -78,3 +78,12 @@ def test_demo_assets_are_cache_busted_and_upload_runs_the_evaluation() -> None:
     assert "app.js?v=" in page and "app.css?v=" in page
     js = client.get("/app/app.js").text
     assert "and evaluated." in js and "R-01 (replay detection)" in js
+
+
+def test_use_current_time_is_a_click_only_button() -> None:
+    page = client.get("/app/").text
+    assert 'id="use-now"' in page and "Use current time" in page
+    js = client.get("/app/app.js").text
+    # wired only to a click; nothing calls it on load or after a file loads
+    assert js.count("useCurrentTime") == 2
+    assert '$("use-now").addEventListener("click", useCurrentTime)' in js
