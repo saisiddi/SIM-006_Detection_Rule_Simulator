@@ -85,7 +85,14 @@ def _run_scenario(page: "object", payload: dict, screenshot_path: Path, badge: s
     page.get_by_role("button", name="Run Evaluation").click()
     page.get_by_text(badge).wait_for(timeout=15000)
     page.wait_for_timeout(1000)
-    page.screenshot(path=str(screenshot_path), full_page=True)
+    # The app scrolls inside `section.stMain` while `.stApp` is overflow:hidden,
+    # so the document itself never scrolls: a document-level full_page capture
+    # stops at the viewport edge and cuts the gate badge off. Bring the badge
+    # into view (a no-op when the viewport is already tall enough) and capture
+    # the viewport, which is what a reader actually sees.
+    page.get_by_text(badge).scroll_into_view_if_needed()
+    page.wait_for_timeout(500)
+    page.screenshot(path=str(screenshot_path), full_page=False)
 
 
 def main() -> int:
@@ -112,7 +119,10 @@ def main() -> int:
     try:
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch()
-            page = browser.new_page(viewport={"width": 1280, "height": 1000})
+            # Tall viewport so the hero, input, gate badge, and the full 8-row
+            # rule table all fit in one frame (the app's own scrolling region
+            # is sized to the viewport, so a taller window shows more at once).
+            page = browser.new_page(viewport={"width": 1280, "height": 1600})
             for _ in range(30):
                 try:
                     page.goto(BASE_URL, timeout=2000)

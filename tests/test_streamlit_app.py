@@ -8,6 +8,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 import sim_006.rules as rules
+import sim_006.simulator as simulator
 from tests.conftest import load_fixture
 
 FIXED_NOW = datetime(2026, 7, 29, 14, 30, 5, tzinfo=timezone.utc)
@@ -16,8 +17,15 @@ APP_PATH = str(Path(__file__).resolve().parent.parent / "sim_006" / "streamlit_a
 
 @pytest.fixture(autouse=True)
 def _freeze_clock(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Freeze the evaluation clock so R-01/R-03 checks are deterministic."""
+    """Freeze the evaluation clock so R-01/R-03 checks are deterministic.
+
+    The test-event generator is frozen to the *same* instant: R-01 now flags
+    timestamps outside a symmetric +/-30s replay window, so a generated event
+    stamped with wall-clock time would be skewed against a frozen evaluation
+    clock and legitimately fail as a future timestamp.
+    """
     monkeypatch.setattr(rules, "_utcnow", lambda: FIXED_NOW)
+    monkeypatch.setattr(simulator, "_now", lambda: FIXED_NOW)
 
 
 def _run_app(payload: dict) -> AppTest:
