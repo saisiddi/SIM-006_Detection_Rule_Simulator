@@ -41,6 +41,12 @@
       <label class="field-label" for="req">Request JSON</label>
       <textarea id="req" spellcheck="false" autocomplete="off" autocapitalize="off" rows="14"></textarea>
 
+      <div class="file-row">
+        <button type="button" class="btn" id="load-file">Load JSON file</button>
+        <input type="file" id="file-input" accept=".json,application/json" hidden>
+        <p class="hint" id="file-note" role="status">Or paste the request above. A loaded file fills the box; press Run evaluation to send it.</p>
+      </div>
+
       <fieldset class="scope">
         <legend>Rules to evaluate</legend>
         <div class="radios">

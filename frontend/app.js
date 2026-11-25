@@ -242,6 +242,27 @@ async function explain() {
       ? `<h3>Recommended checks</h3><ul>${x.recommended_checks.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : "");
 }
 
+const MAX_FILE_BYTES = 1_000_000;
+
+async function loadFile(file) {
+  const note = $("file-note");
+  showFormError("");
+  if (file.size > MAX_FILE_BYTES) {
+    note.textContent = `${file.name} is larger than 1 MB, so it was not loaded.`;
+    return;
+  }
+  const text = await file.text();
+  try {
+    JSON.parse(text);
+  } catch {
+    note.textContent = `${file.name} is not valid JSON, so it was not loaded. The box is unchanged.`;
+    return;
+  }
+  $("req").value = text;
+  $("req").dispatchEvent(new Event("input")); // clears the active scenario, like typing
+  note.textContent = `Loaded ${file.name}. Press Run evaluation to send it.`;
+}
+
 function download() {
   if (!state.last) return;
   const url = URL.createObjectURL(new Blob([JSON.stringify(state.last, null, 2)], { type: "application/json" }));
@@ -278,6 +299,12 @@ async function boot() {
   });
   document.querySelectorAll('input[name="scope"]').forEach((i) =>
     i.addEventListener("change", () => { $("rule-picks").hidden = currentScope() !== "subset"; }));
+  $("load-file").addEventListener("click", () => $("file-input").click());
+  $("file-input").addEventListener("change", (e) => {
+    const f = e.target.files[0];
+    e.target.value = ""; // lets the same file be chosen again
+    if (f) loadFile(f);
+  });
   $("run").addEventListener("click", run);
   $("explain").addEventListener("click", explain);
   $("download").addEventListener("click", download);

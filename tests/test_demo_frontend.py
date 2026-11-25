@@ -65,3 +65,9 @@ def test_every_demo_scenario_produces_its_expected_gate() -> None:
         response = RuleEngine().evaluate(EvaluationRequest.model_validate(scenario["req"]))
         assert response.overall_gate == scenario["expect"], scenario["id"]
         assert response.rules_evaluated == 8
+
+
+def test_demo_ui_offers_json_file_upload_next_to_the_paste_box() -> None:
+    page = client.get("/app/").text
+    assert 'id="req"' in page  # paste still works
+    assert 'id="load-file"' in page and 'type="file"' in page and "application/json" in page

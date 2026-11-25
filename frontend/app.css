@@ -103,6 +103,8 @@ legend { font: 600 1.25rem/1.15 var(--display); letter-spacing: 0.04em; text-tra
 .btn.primary:hover:not(:disabled) { background: #FFFFFF; }
 .btn[aria-busy="true"] { cursor: progress; }
 
+.file-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3) var(--s4); margin-top: var(--s3); }
+.file-row .hint { margin: 0; flex: 1 1 240px; }
 .field-label { display: block; font: 600 1.25rem/1.15 var(--display); letter-spacing: 0.04em;
   text-transform: uppercase; margin-bottom: var(--s2); }
 textarea { width: 100%; min-height: 280px; resize: vertical; background: var(--ground); color: var(--ink);
