@@ -71,3 +71,10 @@ def test_demo_ui_offers_json_file_upload_next_to_the_paste_box() -> None:
     page = client.get("/app/").text
     assert 'id="req"' in page  # paste still works
     assert 'id="load-file"' in page and 'type="file"' in page and "application/json" in page
+
+
+def test_demo_assets_are_cache_busted_and_upload_runs_the_evaluation() -> None:
+    page = client.get("/app/").text
+    assert "app.js?v=" in page and "app.css?v=" in page
+    js = client.get("/app/app.js").text
+    assert "and evaluated." in js and "R-01 (replay detection)" in js

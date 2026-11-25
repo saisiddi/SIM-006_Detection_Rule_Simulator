@@ -1,4 +1,4 @@
-import { SCENARIOS } from "./scenarios.js";
+import { SCENARIOS } from "./scenarios.js?v=2";
 
 const $ = (id) => document.getElementById(id);
 const LABEL = { PASS: "Pass", WARN: "Warn", HARD_FAIL: "Hard fail" };
@@ -14,7 +14,7 @@ const svg = (name, cls = "") =>
 const esc = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-const state = { rules: [], last: null, active: null, running: false };
+const state = { rules: [], last: null, active: null, running: false, fromFile: null };
 
 /* ---------- HTTP ---------- */
 async function call(method, path, body) {
@@ -148,6 +148,16 @@ function currentScope() {
   return document.querySelector('input[name="scope"]:checked').value;
 }
 
+const STALE_AFTER_S = 30; // R-01 replay window
+
+function showStaleNote(payload) {
+  const note = $("stale-note");
+  const age = state.fromFile ? Math.round((Date.now() - Date.parse(payload?.event?.timestamp)) / 1000) : NaN;
+  note.hidden = !(age > STALE_AFTER_S);
+  note.textContent = note.hidden ? "" :
+    `This file's timestamp is ${age} seconds old, so R-01 (replay detection) fails it. Use a fresh timestamp to test other rules.`;
+}
+
 async function run() {
   if (state.running) return;
   showFormError("");
@@ -184,6 +194,7 @@ async function run() {
   btn.disabled = false;
   btn.textContent = "Run evaluation";
   renderProof(r, payload);
+  showStaleNote(payload);
 
   if (r.ok && r.data && r.data.overall_gate) {
     state.last = r.data;
@@ -205,6 +216,7 @@ async function run() {
 
 function pickScenario(s) {
   state.active = s;
+  state.fromFile = null;
   document.querySelectorAll("#scenarios .btn").forEach((b) =>
     b.setAttribute("aria-pressed", String(b.dataset.id === s.id)));
   $("req").value = JSON.stringify(s.build(), null, 2);
@@ -260,7 +272,9 @@ async function loadFile(file) {
   }
   $("req").value = text;
   $("req").dispatchEvent(new Event("input")); // clears the active scenario, like typing
-  note.textContent = `Loaded ${file.name}. Press Run evaluation to send it.`;
+  state.fromFile = file.name; // after the input event, which clears it
+  await run();
+  note.textContent = `Loaded ${file.name} and evaluated.`;
 }
 
 function download() {
@@ -295,6 +309,7 @@ async function boot() {
   $("req").value = JSON.stringify(SCENARIOS[0].build(), null, 2);
   $("req").addEventListener("input", () => {
     state.active = null;
+    state.fromFile = null;
     document.querySelectorAll("#scenarios .btn").forEach((b) => b.setAttribute("aria-pressed", "false"));
   });
   document.querySelectorAll('input[name="scope"]').forEach((i) =>

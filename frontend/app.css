@@ -130,6 +130,7 @@ input[type="radio"], input[type="checkbox"] { width: 24px; height: 24px; margin:
   letter-spacing: 0.02em; }
 .master-sub { margin-top: var(--s1); font-size: 1.125rem; }
 .proof-strip { margin-top: var(--s3); font: 500 1rem/1.5 var(--mono); color: var(--ink-2); }
+.stale-note { margin-top: var(--s3); padding: var(--s3) var(--s4); border: 2px dashed var(--edge); color: var(--ink); font: 500 1rem/1.5 var(--text); }
 .proof-strip a { color: var(--ink); text-underline-offset: 4px; display: inline-flex; align-items: center;
   min-height: 44px; }
 .master.standby { background: var(--panel-2); border: 2px dashed var(--edge); color: var(--ink-2); }

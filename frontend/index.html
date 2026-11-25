@@ -12,8 +12,8 @@
   <link rel="preload" href="fonts/barlow-condensed-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/barlow-condensed-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/jetbrains-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="app.css">
-  <script type="module" src="app.js"></script>
+  <link rel="stylesheet" href="app.css?v=2">
+  <script type="module" src="app.js?v=2"></script>
 </head>
 <body>
   <a class="skip" href="#console">Skip to the request console</a>
@@ -44,7 +44,7 @@
       <div class="file-row">
         <button type="button" class="btn" id="load-file">Load JSON file</button>
         <input type="file" id="file-input" accept=".json,application/json" hidden>
-        <p class="hint" id="file-note" role="status">Or paste the request above. A loaded file fills the box; press Run evaluation to send it.</p>
+        <p class="hint" id="file-note" role="status">Or paste the request above. A loaded file is evaluated straight away.</p>
       </div>
 
       <fieldset class="scope">
@@ -72,6 +72,7 @@
         </div>
       </div>
       <p class="proof-strip" id="proof-strip"><a href="#h-proof">Backend proof</a>: nothing sent yet</p>
+      <p class="stale-note" id="stale-note" role="status" hidden></p>
       <p class="sr-only" id="live" aria-live="polite" aria-atomic="true"></p>
 
       <h3 class="lamps-title">Rules <span class="hint" id="lamps-note">8 loaded from the API</span></h3>
