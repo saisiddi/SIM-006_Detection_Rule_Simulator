@@ -7,9 +7,11 @@ FastAPI's default HTTP 422 (intentionally not overridden).
 """
 
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from sim_006.engine import RuleEngine, RuleSelectionError
 from sim_006.explanation import ExplanationResponse, configured_explanation_service
@@ -84,3 +86,17 @@ def health() -> dict[str, object]:
         Status payload confirming the API is running, tagged simulated=True.
     """
     return {"status": "ok", "simulated": True}
+
+
+# Demo frontend: same origin as the API, so no CORS. It lives under /app/ rather than a
+# root mount so that every existing API path (including its 405 for a wrong method) is
+# untouched; "/" just redirects there.
+_FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+if _FRONTEND_DIR.is_dir():
+
+    @app.get("/", include_in_schema=False)
+    def frontend_redirect() -> RedirectResponse:
+        """Send the bare origin to the demo UI."""
+        return RedirectResponse("/app/")
+
+    app.mount("/app", StaticFiles(directory=_FRONTEND_DIR, html=True), name="frontend")

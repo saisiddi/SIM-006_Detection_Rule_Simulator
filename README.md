@@ -9,6 +9,19 @@ produces pass / warning / hard-fail gate decisions.
 
 ---
 
+## Run the demo UI
+
+```bash
+venv/bin/python -m uvicorn sim_006.api:app --host 127.0.0.1 --port 8000
+```
+
+Then open **http://localhost:8000/app/** (the UI is served by the API itself; nothing else to start).
+
+> The old Streamlit UI (`streamlit run sim_006/streamlit_app.py`, port 8501) is **not** the demo UI.
+> If something is listening on port 8501, close it before presenting.
+
+---
+
 ## What it does
 
 Consumes synthetic events (telemetry, identity, firmware, cyber) produced by
