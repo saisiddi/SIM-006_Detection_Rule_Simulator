@@ -12,8 +12,8 @@
   <link rel="preload" href="fonts/barlow-condensed-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/barlow-condensed-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/jetbrains-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="app.css?v=3">
-  <script type="module" src="app.js?v=3"></script>
+  <link rel="stylesheet" href="app.css?v=4">
+  <script type="module" src="app.js?v=4"></script>
 </head>
 <body>
   <a class="skip" href="#console">Skip to the request console</a>
@@ -48,13 +48,14 @@
         <p class="hint" id="file-note" role="status">Or paste the request above. A loaded file is evaluated straight away.</p>
       </div>
 
-      <fieldset class="scope">
-        <legend>Rules to evaluate</legend>
-        <div class="radios">
-          <label class="radio"><input type="radio" name="scope" value="all" checked> All rules</label>
-          <label class="radio"><input type="radio" name="scope" value="subset"> Choose rules</label>
+      <fieldset class="scope" id="rule-set">
+        <legend>Rules to evaluate <span class="hint" id="rule-count" role="status"></span></legend>
+        <div class="rule-checks" id="rule-checks"></div>
+        <div class="rule-actions">
+          <button type="button" class="btn" id="sel-all">Select all</button>
+          <button type="button" class="btn" id="sel-none">Clear</button>
         </div>
-        <div class="rule-picks" id="rule-picks" hidden></div>
+        <p class="form-error" id="rule-error" hidden>Select at least one rule</p>
       </fieldset>
 
       <div class="run-row">
@@ -73,6 +74,7 @@
         </div>
       </div>
       <p class="proof-strip" id="proof-strip"><a href="#h-proof">Backend proof</a>: nothing sent yet</p>
+      <p class="bypass-note" id="bypass-note" hidden></p>
       <p class="stale-note" id="stale-note" role="status" hidden></p>
       <p class="sr-only" id="live" aria-live="polite" aria-atomic="true"></p>
 

@@ -1,4 +1,4 @@
-import { SCENARIOS } from "./scenarios.js?v=3";
+import { SCENARIOS, expectedGate } from "./scenarios.js?v=4";
 
 const $ = (id) => document.getElementById(id);
 const LABEL = { PASS: "Pass", WARN: "Warn", HARD_FAIL: "Hard fail" };
@@ -14,7 +14,7 @@ const svg = (name, cls = "") =>
 const esc = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-const state = { rules: [], last: null, active: null, running: false, fromFile: null };
+const state = { rules: [], last: null, active: null, running: false, fromFile: null, selected: new Set() };
 
 /* ---------- HTTP ---------- */
 async function call(method, path, body) {
@@ -83,6 +83,12 @@ function lampHtml(r, idle) {
     `<h4 class="lname">${esc(r.rule_name)}</h4><p class="ldetail">${esc(idle ? r.description : r.detail)}</p></li>`;
 }
 
+function skippedLampHtml(r) {
+  return `<li class="lamp skipped"><div class="lamp-head"><span class="lid">${esc(r.rule_id)}</span>` +
+    `<span class="chip">${svg("IDLE")}Not evaluated</span></div><h4 class="lname">${esc(r.rule_name)}</h4>` +
+    `<p class="ldetail">Bypassed: this rule did not run and does not affect the gate.</p></li>`;
+}
+
 function renderIdleLamps() {
   $("lamps").innerHTML = state.rules.map((r) => lampHtml(r, true)).join("");
   $("lamps-note").textContent = state.rules.length ? `${state.rules.length} loaded from the API` : "";
@@ -109,11 +115,20 @@ function renderResult(r) {
     `Overall gate: ${label}. ${res.rules_evaluated} rules evaluated. ${res.gate_reason}`;
   const sorted = [...res.results].sort(
     (a, b) => RANK[a.result] - RANK[b.result] || a.rule_id.localeCompare(b.rule_id));
-  $("lamps").innerHTML = sorted.map((x) => lampHtml(x, false)).join("");
-  $("lamps-note").textContent = "failures first";
+  const ran = new Set(res.results.map((x) => x.rule_id));
+  const skipped = state.rules.filter((x) => !ran.has(x.rule_id));
+  $("lamps").innerHTML = sorted.map((x) => lampHtml(x, false)).join("") + skipped.map(skippedLampHtml).join("");
+  $("lamps-note").textContent = skipped.length ? "failures first, then not evaluated" : "failures first";
+  const note = $("bypass-note");
+  note.hidden = !skipped.length;
+  note.textContent = skipped.length
+    ? `Not evaluated (bypassed): ${skipped.map((x) => x.rule_id).join(", ")}. ${skipped.length === 1 ? "It does" : "They do"} not affect the gate.`
+    : "";
+  if (skipped.length) $("live").textContent += ` ${note.textContent}`;
 }
 
 function renderError(r, message) {
+  $("bypass-note").hidden = true;
   setMaster("err", "Request failed", message, "HARD_FAIL");
   $("live").textContent = `Request failed. ${message}`;
 }
@@ -129,9 +144,12 @@ function renderProof(r, sent) {
   const exp = $("p-expect");
   if (state.active && r.ok) {
     const got = r.data.overall_gate;
-    exp.textContent = got === state.active.expect
-      ? `expected ${state.active.expect}, backend returned ${got}: match`
-      : `expected ${state.active.expect}, backend returned ${got}: MISMATCH`;
+    const ids = Array.isArray(sent.rule_ids) ? sent.rule_ids : state.rules.map((x) => x.rule_id);
+    const want = expectedGate(state.active, ids);
+    const scope = ids.length < state.rules.length ? ` (${ids.length} of ${state.rules.length} rules)` : "";
+    exp.textContent = got === want
+      ? `expected ${want}, backend returned ${got}: match${scope}`
+      : `expected ${want}, backend returned ${got}: MISMATCH${scope}`;
   } else {
     exp.textContent = state.active ? "—" : "custom request";
   }
@@ -144,8 +162,17 @@ function showFormError(msg) {
 }
 
 /* ---------- actions ---------- */
-function currentScope() {
-  return document.querySelector('input[name="scope"]:checked').value;
+const selectedIds = () => state.rules.map((r) => r.rule_id).filter((id) => state.selected.has(id));
+const noneSelected = () => state.rules.length > 0 && state.selected.size === 0;
+
+// Keeps counter, checkboxes, message and Run button in step with state.selected.
+function syncSelection() {
+  const n = state.rules.length;
+  document.querySelectorAll("#rule-checks input").forEach((i) => { i.checked = state.selected.has(i.value); });
+  $("rule-count").textContent = n ? `${state.selected.size} of ${n} rules selected` : "";
+  $("sel-all").textContent = n ? `Select all ${n}` : "Select all";
+  $("rule-error").hidden = !noneSelected();
+  $("run").disabled = state.running || noneSelected();
 }
 
 const STALE_AFTER_S = 30; // R-01 replay window
@@ -172,13 +199,11 @@ async function run() {
     showFormError("The JSON must be an object: { battery_id, event, rule_ids }.");
     return;
   }
-  if (currentScope() === "subset") {
-    const picked = [...document.querySelectorAll("#rule-picks input:checked")].map((i) => i.value);
-    if (!picked.length) { showFormError("Choose at least one rule, or switch to All rules."); return; }
-    payload.rule_ids = picked;
-  } else {
-    payload.rule_ids = "all";
-  }
+  if (noneSelected()) { syncSelection(); return; } // never send an empty list (the API answers 400)
+  const ids = selectedIds();
+  // The ticked rules always override any rule_ids in the request; the box shows what is sent.
+  payload.rule_ids = !state.rules.length || ids.length === state.rules.length ? "all" : ids;
+  $("req").value = JSON.stringify(payload, null, 2);
 
   state.running = true;
   const btn = $("run");
@@ -191,8 +216,8 @@ async function run() {
 
   state.running = false;
   btn.removeAttribute("aria-busy");
-  btn.disabled = false;
   btn.textContent = "Run evaluation";
+  syncSelection();
   renderProof(r, payload);
   showStaleNote(payload);
 
@@ -220,8 +245,6 @@ function pickScenario(s) {
   document.querySelectorAll("#scenarios .btn").forEach((b) =>
     b.setAttribute("aria-pressed", String(b.dataset.id === s.id)));
   $("req").value = JSON.stringify(s.build(), null, 2);
-  document.querySelector('input[name="scope"][value="all"]').checked = true;
-  $("rule-picks").hidden = true;
   run();
 }
 
@@ -320,10 +343,13 @@ function buildScenarioButtons() {
   });
 }
 
-function buildRulePicks() {
-  $("rule-picks").innerHTML = state.rules
-    .map((r) => `<label class="check"><input type="checkbox" value="${esc(r.rule_id)}" checked> ${esc(r.rule_id)}</label>`)
+function buildRuleChecks() {
+  state.selected = new Set(state.rules.map((r) => r.rule_id)); // all ticked by default
+  $("rule-checks").innerHTML = state.rules
+    .map((r) => `<label class="check"><input type="checkbox" value="${esc(r.rule_id)}" checked>` +
+      `<span><span class="rid">${esc(r.rule_id)}</span> ${esc(r.rule_name)}</span></label>`)
     .join("");
+  syncSelection();
 }
 
 async function boot() {
@@ -334,8 +360,12 @@ async function boot() {
     state.fromFile = null;
     document.querySelectorAll("#scenarios .btn").forEach((b) => b.setAttribute("aria-pressed", "false"));
   });
-  document.querySelectorAll('input[name="scope"]').forEach((i) =>
-    i.addEventListener("change", () => { $("rule-picks").hidden = currentScope() !== "subset"; }));
+  $("rule-checks").addEventListener("change", (e) => {
+    if (e.target.checked) state.selected.add(e.target.value); else state.selected.delete(e.target.value);
+    syncSelection();
+  });
+  $("sel-all").addEventListener("click", () => { state.selected = new Set(state.rules.map((r) => r.rule_id)); syncSelection(); });
+  $("sel-none").addEventListener("click", () => { state.selected.clear(); syncSelection(); });
   $("load-file").addEventListener("click", () => $("file-input").click());
   $("use-now").addEventListener("click", useCurrentTime);
   $("file-input").addEventListener("change", (e) => {
@@ -349,7 +379,7 @@ async function boot() {
 
   const [health, rules] = await Promise.all([call("GET", "/health"), call("GET", "/rules")]);
   state.rules = rules.ok ? rules.data.rules : [];
-  buildRulePicks();
+  buildRuleChecks();
   renderIdleLamps();
   renderPills(health, rules);
   if (!health.ok) {

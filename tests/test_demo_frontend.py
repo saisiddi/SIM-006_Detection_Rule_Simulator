@@ -43,7 +43,7 @@ def test_every_demo_scenario_produces_its_expected_gate() -> None:
     """Run the real scenarios.js, send each request through the real engine."""
     script = (
         "import { SCENARIOS } from './scenarios.js';"
-        "console.log(JSON.stringify(SCENARIOS.map(s => ({id: s.id, expect: s.expect, req: s.build()}))));"  # noqa: E501 (inline JS)
+        "console.log(JSON.stringify(SCENARIOS.map(s => ({id: s.id, expect: s.expect, triggers: s.triggers, req: s.build()}))));"  # noqa: E501 (inline JS)
     )
     out = subprocess.run(
         ["node", "--input-type=module", "-e", script],
@@ -87,3 +87,45 @@ def test_use_current_time_is_a_click_only_button() -> None:
     # wired only to a click; nothing calls it on load or after a file loads
     assert js.count("useCurrentTime") == 2
     assert '$("use-now").addEventListener("click", useCurrentTime)' in js
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_expected_gate_on_a_rule_subset_matches_the_backend() -> None:
+    """expectedGate() from the real scenarios.js must agree with the engine for every subset."""
+    rule_ids = [r["rule_id"] for r in client.get("/rules").json()["rules"]]
+    subsets = [[r for r in rule_ids if r != skip] for skip in rule_ids] + [
+        rule_ids[:3],
+        rule_ids[3:5],
+    ]
+    script = (
+        "import { SCENARIOS, expectedGate } from './scenarios.js';"
+        f"const subsets = {json.dumps(subsets)};"
+        "console.log(JSON.stringify(SCENARIOS.map(s => ({id: s.id, req: s.build(),"  # noqa: E501 (inline JS)
+        " want: subsets.map(ids => expectedGate(s, ids))}))));"
+    )
+    out = subprocess.run(
+        ["node", "--input-type=module", "-e", script],
+        cwd=FRONTEND,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    for scenario in json.loads(out):
+        for ids, want in zip(subsets, scenario["want"], strict=True):
+            body = {**scenario["req"], "rule_ids": ids}
+            got = client.post("/evaluate", json=body).json()
+            assert got["overall_gate"] == want, (scenario["id"], ids)
+    replay = next(s for s in json.loads(out) if s["id"] == "replay")
+    # replay with R-01 unticked is PASS, and the backend agrees
+    assert replay["want"][0] == "PASS"
+    assert (
+        client.post("/evaluate", json={**replay["req"], "rule_ids": subsets[0]}).json()[
+            "overall_gate"
+        ]
+        == "PASS"
+    )
+
+
+def test_api_rejects_an_empty_rule_list_so_the_ui_never_sends_one() -> None:
+    body = {"battery_id": "B", "event": {"event_type": "telemetry"}, "rule_ids": []}
+    assert client.post("/evaluate", json=body).status_code == 400

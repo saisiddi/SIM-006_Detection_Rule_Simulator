@@ -114,9 +114,16 @@ textarea { width: 100%; min-height: 280px; resize: vertical; background: var(--g
 .radios { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s6); }
 .radio, .check { display: inline-flex; align-items: center; gap: var(--s3); min-height: 44px; cursor: pointer; }
 input[type="radio"], input[type="checkbox"] { width: 24px; height: 24px; margin: 0; accent-color: var(--ink); }
-.rule-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(120px, 100%), 1fr)); gap: var(--s1) var(--s4);
-  margin-top: var(--s2); font-family: var(--mono); font-size: 1rem; }
-.rule-picks[hidden] { display: none; }
+.rule-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: var(--s1) var(--s4);
+  margin-top: var(--s2); }
+.rule-checks .check { min-height: 48px; }
+.rid { font-family: var(--mono); font-weight: 600; }
+.rule-actions { display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: var(--s3); }
+.rule-actions .btn { min-width: 120px; }
+.rule-actions + .form-error { margin-top: var(--s3); }
+.bypass-note { margin-top: var(--s3); padding: var(--s3) var(--s4); border: 2px dashed var(--edge); font: 500 1rem/1.5 var(--text); }
+.bypass-note[hidden], .stale-note[hidden] { display: none; }
+.lamp.skipped { border-style: dashed; color: var(--ink-2); }
 
 .form-error { margin-top: var(--s4); padding: var(--s3) var(--s4); background: #2A1210;
   border: 1px solid var(--fail); border-radius: 4px; color: #FFB3AC; }
