@@ -21,12 +21,16 @@ const request = (battery_id, event) => ({ battery_id, event, rule_ids: "all" });
 export const SCENARIOS = [
   {
     id: "clean",
+    // Rules that fire on this request when run alone (checked against the real API).
+    triggers: {},
     label: "Clean pass",
     expect: "PASS",
     build: () => request("SIM-BATTERY-001", baseEvent()),
   },
   {
     id: "voltage-warning",
+    // Rules that fire on this request when run alone (checked against the real API).
+    triggers: { "R-05": "WARN" },
     label: "Voltage warning",
     expect: "WARN",
     // 58 V sits inside the 56-61.6 V WARN band (see tests/fixtures/event_voltage_warn.json).
@@ -34,6 +38,8 @@ export const SCENARIOS = [
   },
   {
     id: "replay",
+    // Rules that fire on this request when run alone (checked against the real API).
+    triggers: { "R-01": "HARD_FAIL" },
     label: "Replay attack",
     expect: "HARD_FAIL",
     build: () =>
@@ -45,6 +51,8 @@ export const SCENARIOS = [
   },
   {
     id: "missing-timestamp",
+    // Rules that fire on this request when run alone (checked against the real API).
+    triggers: { "R-02": "HARD_FAIL" },
     label: "Missing timestamp",
     expect: "HARD_FAIL",
     build: () => {
@@ -55,6 +63,8 @@ export const SCENARIOS = [
   },
   {
     id: "firmware",
+    // Rules that fire on this request when run alone (checked against the real API).
+    triggers: { "R-04": "HARD_FAIL" },
     label: "Firmware tampering",
     expect: "HARD_FAIL",
     build: () =>
@@ -67,6 +77,8 @@ export const SCENARIOS = [
   },
   {
     id: "impossible-soc",
+    // Rules that fire on this request when run alone (checked against the real API).
+    triggers: { "R-08": "HARD_FAIL" },
     label: "Impossible SOC",
     expect: "HARD_FAIL",
     build: () =>
@@ -78,3 +90,15 @@ export const SCENARIOS = [
       }),
   },
 ];
+
+const SEVERITY = { PASS: 0, WARN: 1, HARD_FAIL: 2 };
+
+// Gate this scenario should produce when only `ruleIds` are evaluated.
+export function expectedGate(scenario, ruleIds) {
+  let worst = "PASS";
+  for (const id of ruleIds) {
+    const g = scenario.triggers[id] || "PASS";
+    if (SEVERITY[g] > SEVERITY[worst]) worst = g;
+  }
+  return worst;
+}
